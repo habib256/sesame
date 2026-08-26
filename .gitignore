@@ -1,0 +1,10 @@
+build/
+# Jamais de ROM dans le dépôt : commerciales (copyright), selftest.sms
+# (généré par tools/make_test_rom.py) et zexdoc/zexall (GPL, récupérées
+# par tools/fetch_zexall.py).
+roms/
+*.ppm
+*.wav
+*.sav
+.DS_Store
+__pycache__/

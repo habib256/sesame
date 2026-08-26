@@ -1,0 +1,399 @@
+// =============================================================================
+//  sesame-headless — frontend de validation n°1 du projet.
+//  Exécute une ROM sans interface : traces déterministes, captures PPM,
+//  enregistrement WAV du PSG, console SDSC. Tous les messages sont en anglais.
+//
+//  Usage : sesame-headless <rom.sms> [options]   (voir --help)
+// =============================================================================
+#include "core/Machine.hpp"
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+#include <vector>
+
+namespace {
+
+// -----------------------------------------------------------------------------
+//  Aide (anglais, sur stdout).
+// -----------------------------------------------------------------------------
+void printUsage(FILE* out)
+{
+    std::fprintf(out,
+        "usage: sesame-headless <rom.sms> [options]\n"
+        "\n"
+        "options:\n"
+        "  --bios FILE           load FILE into the BIOS slot (boots before the\n"
+        "                        cartridge; a ROM whose name contains \"BIOS\" is\n"
+        "                        loaded there automatically)\n"
+        "  --pal                 emulate a PAL console (313 lines, ~49.70 Hz,\n"
+        "                        CPU 3546893 Hz) instead of NTSC\n"
+        "  --frames N            number of frames to run (default 60)\n"
+        "  --trace FILE          write a per-instruction CPU trace to FILE\n"
+        "  --screenshot FILE.ppm capture the final framebuffer as a PPM image\n"
+        "  --shot-every N PREFIX capture PREFIX%%04d.ppm every N frames\n"
+        "  --sav                 load and persist cartridge save RAM (<rom>.sav);\n"
+        "                        off by default to keep runs deterministic\n"
+        "  --sdsc                enable the SDSC debug console (ports 0xFC/0xFD)\n"
+        "  --exit-sdsc TEXT      stop as soon as the SDSC output contains TEXT\n"
+        "                        (implies --sdsc; for test harnesses)\n"
+        "  --wav FILE            record PSG audio (44100 Hz mono s16 WAV)\n"
+        "  --pause-at N          press the Pause button (NMI) at frame N\n"
+        "  --help                show this help and exit\n");
+}
+
+// -----------------------------------------------------------------------------
+//  Écrit le framebuffer RGBA du VDP dans un PPM binaire (P6).
+//  Chaque pixel est un u32 little-endian : R = v & 0xFF, puis G, puis B.
+// -----------------------------------------------------------------------------
+bool writePpm(const char* path, const u32* fb)
+{
+    FILE* f = std::fopen(path, "wb");
+    if (!f) {
+        std::fprintf(stderr, "error: cannot open '%s' for writing\n", path);
+        return false;
+    }
+    std::fprintf(f, "P6\n%d %d\n255\n", Vdp::kWidth, Vdp::kHeight);
+    // Conversion RGBA -> RGB, un pixel à la fois (simple et déterministe).
+    for (int i = 0; i < Vdp::kWidth * Vdp::kHeight; ++i) {
+        const u32 v = fb[i];
+        const unsigned char rgb[3] = {
+            static_cast<unsigned char>(v & 0xFF),
+            static_cast<unsigned char>((v >> 8) & 0xFF),
+            static_cast<unsigned char>((v >> 16) & 0xFF),
+        };
+        std::fwrite(rgb, 1, 3, f);
+    }
+    std::fclose(f);
+    return true;
+}
+
+// -----------------------------------------------------------------------------
+//  En-tête WAV écrit à la main : RIFF/WAVE, fmt PCM 16 bits mono 44100 Hz.
+//  Les tailles sont bouchées à zéro puis corrigées à la fin (via fseek).
+// -----------------------------------------------------------------------------
+void writeU32le(FILE* f, u32 v)
+{
+    const unsigned char b[4] = {
+        static_cast<unsigned char>(v & 0xFF),
+        static_cast<unsigned char>((v >> 8) & 0xFF),
+        static_cast<unsigned char>((v >> 16) & 0xFF),
+        static_cast<unsigned char>((v >> 24) & 0xFF),
+    };
+    std::fwrite(b, 1, 4, f);
+}
+
+void writeU16le(FILE* f, u16 v)
+{
+    const unsigned char b[2] = {
+        static_cast<unsigned char>(v & 0xFF),
+        static_cast<unsigned char>((v >> 8) & 0xFF),
+    };
+    std::fwrite(b, 1, 2, f);
+}
+
+void writeWavHeader(FILE* f, u32 dataBytes)
+{
+    const u32 sampleRate = Psg::kSampleRate;
+    const u16 channels   = 1;
+    const u16 bitsPerSmp = 16;
+    const u16 blockAlign = channels * bitsPerSmp / 8;
+    const u32 byteRate   = sampleRate * blockAlign;
+
+    std::fwrite("RIFF", 1, 4, f);
+    writeU32le(f, 36 + dataBytes);      // taille RIFF = 4 + (8+16) + (8+data)
+    std::fwrite("WAVE", 1, 4, f);
+    std::fwrite("fmt ", 1, 4, f);
+    writeU32le(f, 16);                  // taille du bloc fmt
+    writeU16le(f, 1);                   // format PCM
+    writeU16le(f, channels);
+    writeU32le(f, sampleRate);
+    writeU32le(f, byteRate);
+    writeU16le(f, blockAlign);
+    writeU16le(f, bitsPerSmp);
+    std::fwrite("data", 1, 4, f);
+    writeU32le(f, dataBytes);
+}
+
+// Écrit des échantillons s16 en little-endian explicite (portable).
+void writeSamplesLe(FILE* f, const s16* smp, int n)
+{
+    for (int i = 0; i < n; ++i) {
+        const u16 v = static_cast<u16>(smp[i]);
+        writeU16le(f, v);
+    }
+}
+
+// Taille d'un fichier (pour le message "rom: ..."), -1 si introuvable.
+long fileSize(const char* path)
+{
+    FILE* f = std::fopen(path, "rb");
+    if (!f) return -1;
+    long size = -1;
+    if (std::fseek(f, 0, SEEK_END) == 0) size = std::ftell(f);
+    std::fclose(f);
+    return size;
+}
+
+// Détecte une image BIOS par son nom de fichier : le nom de base contient
+// « BIOS » (insensible à la casse). Permet de charger une image renommée
+// « BIOS xxx.sms » sans option explicite.
+bool looksLikeBios(const char* path)
+{
+    const char* base = std::strrchr(path, '/');
+    base = base ? base + 1 : path;
+    for (const char* p = base; *p; ++p) {
+        if ((p[0] == 'B' || p[0] == 'b') && (p[1] == 'I' || p[1] == 'i') &&
+            (p[2] == 'O' || p[2] == 'o') && (p[3] == 'S' || p[3] == 's'))
+            return true;
+    }
+    return false;
+}
+
+// Lit un entier positif pour une option ; quitte avec un message sinon.
+long parseCount(const char* opt, const char* arg)
+{
+    if (!arg) {
+        std::fprintf(stderr, "error: %s requires a value\n", opt);
+        std::exit(1);
+    }
+    char* end = nullptr;
+    const long v = std::strtol(arg, &end, 10);
+    if (end == arg || *end != '\0' || v < 0) {
+        std::fprintf(stderr, "error: %s expects a non-negative integer, got '%s'\n",
+                     opt, arg);
+        std::exit(1);
+    }
+    return v;
+}
+
+} // namespace
+
+int main(int argc, char** argv)
+{
+    if (argc < 2) {
+        std::fprintf(stderr, "error: no ROM file given\n");
+        printUsage(stderr);
+        return 1;
+    }
+    if (std::strcmp(argv[1], "--help") == 0) {
+        printUsage(stdout);
+        return 0;
+    }
+
+    const char* romPath = argv[1];
+
+    // --- Analyse des options -------------------------------------------------
+    const char* biosPath      = nullptr;
+    bool        pal           = false;
+    bool        sav           = false;
+    long        frames        = 60;
+    const char* tracePath     = nullptr;
+    const char* screenshotPath = nullptr;
+    long        shotEvery     = 0;        // 0 = désactivé
+    const char* shotPrefix    = nullptr;
+    bool        sdsc          = false;
+    const char* exitSdsc      = nullptr;
+    const char* wavPath       = nullptr;
+    long        pauseAt       = -1;       // -1 = jamais
+
+    for (int i = 2; i < argc; ++i) {
+        const char* a = argv[i];
+        if (std::strcmp(a, "--help") == 0) {
+            printUsage(stdout);
+            return 0;
+        } else if (std::strcmp(a, "--pal") == 0) {
+            pal = true;
+        } else if (std::strcmp(a, "--bios") == 0) {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "error: --bios requires a file name\n");
+                return 1;
+            }
+            biosPath = argv[++i];
+        } else if (std::strcmp(a, "--frames") == 0) {
+            frames = parseCount(a, (i + 1 < argc) ? argv[++i] : nullptr);
+        } else if (std::strcmp(a, "--trace") == 0) {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "error: --trace requires a file name\n");
+                return 1;
+            }
+            tracePath = argv[++i];
+        } else if (std::strcmp(a, "--screenshot") == 0) {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "error: --screenshot requires a file name\n");
+                return 1;
+            }
+            screenshotPath = argv[++i];
+        } else if (std::strcmp(a, "--shot-every") == 0) {
+            shotEvery = parseCount(a, (i + 1 < argc) ? argv[++i] : nullptr);
+            if (shotEvery <= 0) {
+                std::fprintf(stderr, "error: --shot-every expects a positive interval\n");
+                return 1;
+            }
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "error: --shot-every requires N and PREFIX\n");
+                return 1;
+            }
+            shotPrefix = argv[++i];
+        } else if (std::strcmp(a, "--sav") == 0) {
+            sav = true;
+        } else if (std::strcmp(a, "--sdsc") == 0) {
+            sdsc = true;
+        } else if (std::strcmp(a, "--exit-sdsc") == 0) {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "error: --exit-sdsc requires a text\n");
+                return 1;
+            }
+            exitSdsc = argv[++i];
+            sdsc = true;
+        } else if (std::strcmp(a, "--wav") == 0) {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "error: --wav requires a file name\n");
+                return 1;
+            }
+            wavPath = argv[++i];
+        } else if (std::strcmp(a, "--pause-at") == 0) {
+            pauseAt = parseCount(a, (i + 1 < argc) ? argv[++i] : nullptr);
+        } else {
+            std::fprintf(stderr, "error: unknown option '%s'\n", a);
+            printUsage(stderr);
+            return 1;
+        }
+    }
+
+    // --- Chargement des médias -----------------------------------------------
+    // Un fichier positionnel dont le nom contient « BIOS » va dans le slot
+    // BIOS (sauf si --bios est déjà donné) ; le slot cartouche reste alors
+    // vide, comme une console sans cartouche insérée.
+    Machine machine;
+    machine.setRegion(pal ? Region::Pal : Region::Ntsc);
+    // Persistance .sav opt-in seulement : un .sav qui traîne changerait les
+    // traces, et le headless est l'outil de validation déterministe.
+    machine.cart.savEnabled = sav;
+    if (!biosPath && looksLikeBios(romPath)) {
+        biosPath = romPath;
+        romPath  = nullptr;
+    }
+    if (biosPath) {
+        if (!machine.loadBios(biosPath)) {
+            std::fprintf(stderr, "error: cannot load BIOS '%s' (missing or invalid file)\n",
+                         biosPath);
+            return 1;
+        }
+        std::fprintf(stderr, "bios: %s (%ld bytes)\n", biosPath, fileSize(biosPath));
+    }
+    if (romPath) {
+        if (!machine.loadRom(romPath)) {
+            std::fprintf(stderr, "error: cannot load ROM '%s' (missing or invalid file)\n",
+                         romPath);
+            return 1;
+        }
+        std::fprintf(stderr, "rom: %s (%ld bytes)\n", romPath, fileSize(romPath));
+    }
+    std::fprintf(stderr, "video: %dx%d @ %s\n", Vdp::kWidth, Vdp::kHeight,
+                 pal ? "50 Hz PAL" : "60 Hz NTSC");
+
+    machine.io.sdscEnabled = sdsc;
+
+    // --- Fichiers de sortie --------------------------------------------------
+    FILE* traceFile = nullptr;
+    if (tracePath) {
+        traceFile = std::fopen(tracePath, "w");
+        if (!traceFile) {
+            std::fprintf(stderr, "error: cannot open trace file '%s'\n", tracePath);
+            return 1;
+        }
+        machine.traceFile = traceFile;
+    }
+
+    FILE* wavFile = nullptr;
+    u32 wavDataBytes = 0;
+    if (wavPath) {
+        wavFile = std::fopen(wavPath, "wb");
+        if (!wavFile) {
+            std::fprintf(stderr, "error: cannot open WAV file '%s'\n", wavPath);
+            if (traceFile) std::fclose(traceFile);
+            return 1;
+        }
+        // En-tête provisoire (tailles nulles), corrigé après le run.
+        writeWavHeader(wavFile, 0);
+    }
+
+    // --- Boucle principale : une itération = une trame vidéo -----------------
+    std::vector<s16> audioBuf(8192);
+    // --exit-sdsc : on ne rescanne que le texte SDSC arrivé depuis la
+    // dernière trame (avec un chevauchement de la longueur du motif, au cas
+    // où il serait à cheval sur deux trames).
+    size_t sdscScanned = 0;
+    const size_t exitLen = exitSdsc ? std::strlen(exitSdsc) : 0;
+    for (long f = 0; f < frames; ++f) {
+        // Bouton Pause = front NMI, déclenché AVANT d'exécuter la trame N.
+        if (pauseAt >= 0 && f == pauseAt)
+            machine.pressPause();
+
+        machine.runFrame();
+
+        if (exitSdsc) {
+            const std::string& log = machine.io.sdscLog();
+            const size_t from =
+                (sdscScanned > exitLen) ? sdscScanned - exitLen : 0;
+            if (log.find(exitSdsc, from) != std::string::npos) {
+                std::fprintf(stderr, "exit-sdsc: matched after frame %ld\n",
+                             f + 1);
+                break;
+            }
+            sdscScanned = log.size();
+        }
+
+        // Vidange de l'anneau audio du PSG vers le WAV (évite la saturation).
+        if (wavFile) {
+            int n;
+            while ((n = machine.psg.readSamples(audioBuf.data(),
+                                                static_cast<int>(audioBuf.size()))) > 0) {
+                writeSamplesLe(wavFile, audioBuf.data(), n);
+                wavDataBytes += static_cast<u32>(n) * 2;
+            }
+        }
+
+        // Captures périodiques : PREFIX%04d.ppm, numérotées par trame (1-based).
+        if (shotPrefix && ((f + 1) % shotEvery) == 0) {
+            char name[1024];
+            std::snprintf(name, sizeof(name), "%s%04ld.ppm", shotPrefix, f + 1);
+            if (!writePpm(name, machine.vdp.frameBuffer())) {
+                if (traceFile) std::fclose(traceFile);
+                if (wavFile) std::fclose(wavFile);
+                return 1;
+            }
+        }
+    }
+
+    // --- Sorties finales -----------------------------------------------------
+    if (screenshotPath) {
+        if (!writePpm(screenshotPath, machine.vdp.frameBuffer())) {
+            if (traceFile) std::fclose(traceFile);
+            if (wavFile) std::fclose(wavFile);
+            return 1;
+        }
+    }
+
+    if (wavFile) {
+        // Retour au début pour écrire les vraies tailles dans l'en-tête.
+        std::fseek(wavFile, 0, SEEK_SET);
+        writeWavHeader(wavFile, wavDataBytes);
+        std::fclose(wavFile);
+    }
+
+    if (traceFile) {
+        machine.traceFile = nullptr;
+        std::fclose(traceFile);
+    }
+
+    machine.cart.persistSaveRam();  // no-op sans --sav ou si rien n'a changé
+
+    std::fprintf(stderr, "frames: %llu\n",
+                 static_cast<unsigned long long>(machine.frameCount));
+    std::fprintf(stderr, "cycles: %llu\n",
+                 static_cast<unsigned long long>(machine.cpu.cycles));
+    return 0;
+}

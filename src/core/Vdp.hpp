@@ -1,0 +1,72 @@
+#pragma once
+// =============================================================================
+//  Vdp — Sega 315-5124 (VDP de la Master System), priorité au mode 4.
+//  Ports CPU : 0xBE (données), 0xBF (contrôle/statut), 0x7E (VCounter),
+//  0x7F (HCounter). Rendu par LIGNE dans un framebuffer RGBA 256×192.
+//  NTSC : 262 lignes/trame (~59,92 Hz) ; PAL : 313 lignes (~49,70 Hz) —
+//  sélection par setRegion(), la séquence du VCounter suit.
+// =============================================================================
+#include "Types.hpp"
+
+class Vdp {
+public:
+    static constexpr int kWidth  = 256;
+    static constexpr int kHeight = 192;      // mode 4 standard (224/240 : TODO)
+    static constexpr int kLinesNtsc = 262;
+    static constexpr int kLinesPal  = 313;
+
+    void reset();
+
+    // Norme vidéo : réglage matériel du frontend, survit au reset.
+    void setRegion(Region r) { region = r; }
+    int  linesPerFrame() const {
+        return (region == Region::Pal) ? kLinesPal : kLinesNtsc;
+    }
+
+    // --- Interface ports CPU -------------------------------------------------
+    u8   readData();            // port 0xBE en lecture (tampon + post-incrément)
+    u8   readStatus();          // port 0xBF en lecture (efface VBlank/collision + latch)
+    void writeData(u8 v);       // port 0xBE en écriture (VRAM/CRAM selon code)
+    void writeControl(u8 v);    // port 0xBF en écriture (adresse/registre, 2 octets)
+    u8   vCounter() const;      // port 0x7E (avec le saut propre à la région)
+    u8   hCounter() const;      // port 0x7F (valeur latchée)
+
+    // --- Interface Machine ---------------------------------------------------
+    // Rend la ligne courante (si visible), met à jour compteurs de ligne,
+    // drapeaux d'interruption et VBlank, puis passe à la ligne suivante.
+    void runLine();
+    // Niveau de la ligne /INT vers le CPU (VBlank et/ou interruption de ligne,
+    // selon les bits d'activation des registres 0 et 1).
+    bool irqPending() const;
+    // Vrai UNE fois par trame complète ; consomme le drapeau.
+    bool frameDone();
+
+    int line() const { return curLine; }
+    const u32* frameBuffer() const { return fb; }  // RGBA, kWidth * kHeight
+
+    // --- État exposé (débogueur / save-state) --------------------------------
+    u8 vram[0x4000]{};
+    u8 cram[32]{};
+    u8 regs[16]{};
+
+private:
+    u32 fb[kWidth * kHeight]{};
+    Region region = Region::Ntsc;
+    int curLine = 0;
+
+    // Décodage adresse/contrôle
+    u16 addr = 0;         // pointeur d'adresse courant (14 bits)
+    u8  code = 0;         // code d'opération (2 bits hauts du mot de contrôle)
+    u8  readBuffer = 0;   // tampon de lecture VRAM
+    bool ctrlLatch = false;  // attend le 2e octet du mot de contrôle
+    u8  ctrlFirst = 0;
+
+    // Statut & interruptions
+    u8  status = 0;         // bit7 VBlank, bit6 overflow sprites, bit5 collision
+    u8  lineCounter = 0;    // compteur d'interruption de ligne (registre 10)
+    bool lineIrq = false;
+    bool frameDoneFlag = false;
+    u8  hLatch = 0;
+
+    void renderLine(int y);
+};
