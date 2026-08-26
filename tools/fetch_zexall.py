@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 VERHILLE Arnaud
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Ce fichier fait partie de Sesame, distribué sous licence GNU GPL v3
+# (ou ultérieure), SANS AUCUNE GARANTIE : voir le fichier LICENSE.
+
 # =============================================================================
 #  fetch_zexall.py — télécharge les ROM ZEXDOC/ZEXALL (port SMS de Maxim Zhao,
-#  sortie sur la console SDSC) dans roms/. Elles sont sous GPLv2, donc pas
-#  vendorées dans ce dépôt (MIT) : on les récupère à la demande depuis les
+#  sortie sur la console SDSC) dans roms/. Œuvre tierce sous GPLv2, non
+#  vendorée dans ce dépôt : on la récupère à la demande depuis les
 #  releases GitHub, avec vérification SHA-256.
 #
 #  Usage : python3 tools/fetch_zexall.py

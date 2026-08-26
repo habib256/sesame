@@ -8,7 +8,8 @@
 #
 #  Le Bus EST le plan mémoire : il route read8/write8 et in/out vers les puces.
 #
-#  (c) 2026 VERHILLE Arnaud — code généré dans le cadre du projet Sesame.
+#  Copyright (C) 2026 VERHILLE Arnaud
+#  SPDX-License-Identifier: GPL-3.0-or-later — voir le fichier LICENSE.
 # =============================================================================
 cmake_minimum_required(VERSION 3.20)
 

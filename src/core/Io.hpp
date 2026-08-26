@@ -1,3 +1,8 @@
+// Copyright (C) 2026 VERHILLE Arnaud
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Ce fichier fait partie de Sesame, distribué sous licence GNU GPL v3
+// (ou ultérieure), SANS AUCUNE GARANTIE : voir le fichier LICENSE.
+
 #pragma once
 // =============================================================================
 //  Io — ports d'entrées/sorties hors VDP/PSG :

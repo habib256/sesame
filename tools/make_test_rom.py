@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 VERHILLE Arnaud
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Ce fichier fait partie de Sesame, distribué sous licence GNU GPL v3
+# (ou ultérieure), SANS AUCUNE GARANTIE : voir le fichier LICENSE.
+
 # =============================================================================
 #  make_test_rom.py — génère roms/selftest.sms (32 Ko), une ROM de test pour
 #  Sesame, assemblée à la main (aucun assembleur ni dépendance externe).

@@ -1,3 +1,8 @@
+// Copyright (C) 2026 VERHILLE Arnaud
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Ce fichier fait partie de Sesame, distribué sous licence GNU GPL v3
+// (ou ultérieure), SANS AUCUNE GARANTIE : voir le fichier LICENSE.
+
 // =============================================================================
 //  sesame-headless — frontend de validation n°1 du projet.
 //  Exécute une ROM sans interface : traces déterministes, captures PPM,

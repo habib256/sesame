@@ -1,3 +1,8 @@
+// Copyright (C) 2026 VERHILLE Arnaud
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Ce fichier fait partie de Sesame, distribué sous licence GNU GPL v3
+// (ou ultérieure), SANS AUCUNE GARANTIE : voir le fichier LICENSE.
+
 // =============================================================================
 //  Io.cpp — ports manettes (0xDC/0xDD), contrôle E/S 0x3F et console de
 //  débogage SDSC (0xFC/0xFD). Le contrôle mémoire 0x3E vit dans le Bus.

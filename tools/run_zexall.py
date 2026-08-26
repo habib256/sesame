@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# Copyright (C) 2026 VERHILLE Arnaud
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Ce fichier fait partie de Sesame, distribué sous licence GNU GPL v3
+# (ou ultérieure), SANS AUCUNE GARANTIE : voir le fichier LICENSE.
+
 # =============================================================================
 #  run_zexall.py — validation du cœur Z80 par l'exerciseur ZEXDOC/ZEXALL
 #  (port SMS de Maxim Zhao, sortie SDSC). Lance sesame-headless avec --sdsc,

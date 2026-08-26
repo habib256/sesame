@@ -68,5 +68,6 @@ python3 tools/run_zexall.py all     # runs both exercisers (a few minutes)
 
 ## License
 
-MIT. Sega and Master System are trademarks of SEGA. No original ROM or BIOS
+GPL-3.0-or-later — Copyright (C) 2026 VERHILLE Arnaud. See [LICENSE](LICENSE).
+Sega and Master System are trademarks of SEGA. No original ROM or BIOS
 is included or required.
