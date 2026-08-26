@@ -8,8 +8,9 @@
 //  Une itération de boucle = une trame émulée, téléversée dans une texture
 //  256×192 puis dessinée en quad 4:3 (letterbox). Le vsync 60 Hz cadence tout.
 //
-//  Usage : sesame <rom.sms> [--bios fichier]
+//  Usage : sesame <rom.sms> [--bios fichier] [--pal] [--crt] [--kiosk]
 //  Un fichier dont le nom contient « BIOS » est chargé dans le slot BIOS.
+//  --kiosk = mode borne : plein écran exclusif, curseur masqué, CRT activé.
 // =============================================================================
 
 // CMake définit GL_SILENCE_DEPRECATION sur macOS ; la garde évite de dépendre
@@ -21,12 +22,16 @@
 #include "core/Machine.hpp"
 
 #include "AudioOut.hpp"
+#include "CrtEffectStack.hpp"
+#include "KioskMenu.hpp"
 
 #include <GLFW/glfw3.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -71,8 +76,8 @@ u8 readPadMask(GLFWwindow* win)
 // -----------------------------------------------------------------------------
 //  Lecture d'une manette USB -> masque de boutons SMS + état du bouton Start.
 //  API « gamepad » de GLFW (mappings SDL intégrés) : D-pad OU stick gauche =
-//  directions, A/X = bouton 1, B/Y = bouton 2, Start = bouton Pause de la
-//  console. Retourne 0 si aucune manette reconnue sur ce slot.
+//  directions, A/X = bouton 1, B/Y = bouton 2, Start = menu kiosk.
+//  Retourne 0 si aucune manette reconnue sur ce slot.
 // -----------------------------------------------------------------------------
 u8 readGamepadMask(int jid, bool* startDown)
 {
@@ -131,7 +136,9 @@ void computeViewport(int fbW, int fbH, int& x, int& y, int& w, int& h)
 int main(int argc, char** argv)
 {
     if (argc < 2) {
-        std::fprintf(stderr, "usage: sesame <rom.sms> [--bios FILE] [--pal]\n");
+        std::fprintf(stderr,
+                     "usage: sesame <rom.sms> [--bios FILE] [--pal] [--crt] "
+                     "[--kiosk] [--kiosk-monitor N]\n");
         std::fprintf(stderr, "error: no ROM file given\n");
         return 1;
     }
@@ -139,9 +146,38 @@ int main(int argc, char** argv)
     const char* romPath  = nullptr;
     const char* biosPath = nullptr;
     bool        pal      = false;
+    bool        crtOn    = false;
+    bool        kiosk    = false;
+    int         kioskMonitor = 0;
+    long        shotAtFrame  = -1;       // --shot-at : validation du rendu GL
+    const char* shotPath     = nullptr;
+    bool        openMenu     = false;    // --menu : menu borne ouvert au départ
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--pal") == 0) {
+        if (std::strcmp(argv[i], "--menu") == 0) {
+            openMenu = true;
+        } else if (std::strcmp(argv[i], "--shot-at") == 0) {
+            // Outil de validation : capture le framebuffer OpenGL réellement
+            // affiché (donc APRÈS la passe CRT éventuelle) à la trame N.
+            if (i + 2 >= argc) {
+                std::fprintf(stderr, "error: --shot-at requires N and FILE.ppm\n");
+                return 1;
+            }
+            shotAtFrame = std::atol(argv[++i]);
+            shotPath    = argv[++i];
+        } else if (std::strcmp(argv[i], "--pal") == 0) {
             pal = true;
+        } else if (std::strcmp(argv[i], "--crt") == 0) {
+            crtOn = true;
+        } else if (std::strcmp(argv[i], "--kiosk") == 0) {
+            // Mode borne : plein écran exclusif, curseur masqué, CRT activé.
+            kiosk = true;
+            crtOn = true;
+        } else if (std::strcmp(argv[i], "--kiosk-monitor") == 0) {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "error: --kiosk-monitor requires a number\n");
+                return 1;
+            }
+            kioskMonitor = std::atoi(argv[++i]);
         } else if (std::strcmp(argv[i], "--bios") == 0) {
             if (i + 1 >= argc) {
                 std::fprintf(stderr, "error: --bios requires a file name\n");
@@ -186,12 +222,43 @@ int main(int argc, char** argv)
 
     const std::string title =
         "Sesame — Master System — " + baseName(titlePath);
-    GLFWwindow* win = glfwCreateWindow(768, 576, title.c_str(), nullptr, nullptr);
+
+    // Mode borne : fenêtre créée DIRECTEMENT en plein écran exclusif sur le
+    // moniteur choisi (reste au-dessus des panneaux/dock, garde le focus),
+    // curseur masqué. Sinon : fenêtre bureau classique.
+    GLFWmonitor* kioskMon = nullptr;
+    if (kiosk) {
+        int monCount = 0;
+        GLFWmonitor** mons = glfwGetMonitors(&monCount);
+        if (monCount <= 0) {
+            std::fprintf(stderr, "error: no monitor found\n");
+            glfwTerminate();
+            return 1;
+        }
+        if (kioskMonitor < 0 || kioskMonitor >= monCount) {
+            std::fprintf(stderr,
+                         "warning: monitor %d not found (%d available), using 0\n",
+                         kioskMonitor, monCount);
+            kioskMonitor = 0;
+        }
+        kioskMon = mons[kioskMonitor];
+    }
+
+    GLFWwindow* win = nullptr;
+    if (kioskMon) {
+        const GLFWvidmode* mode = glfwGetVideoMode(kioskMon);
+        win = glfwCreateWindow(mode->width, mode->height, title.c_str(),
+                               kioskMon, nullptr);
+    } else {
+        win = glfwCreateWindow(768, 576, title.c_str(), nullptr, nullptr);
+    }
     if (!win) {
         std::fprintf(stderr, "error: failed to create window\n");
         glfwTerminate();
         return 1;
     }
+    if (kiosk)
+        glfwSetInputMode(win, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
     glfwMakeContextCurrent(win);
     // Vsync pour un affichage sans déchirure — mais il ne cadence PAS
     // l'émulation : sur un écran 120 Hz ou VRR il tournerait trop vite.
@@ -217,11 +284,56 @@ int main(int argc, char** argv)
 
     bool pauseWasDown = false;  // détection de FRONT pour le bouton Pause (NMI)
 
-    // Bascule plein écran (touche F, sur front) : on mémorise la géométrie
-    // fenêtrée pour la restaurer au retour.
-    bool fullscreen = false;
+    // Bascule plein écran (touche F ou action du menu) : on mémorise la
+    // géométrie fenêtrée pour la restaurer au retour. En kiosk, on démarre
+    // plein écran avec une géométrie fenêtrée par défaut en cas de sortie.
+    bool fullscreen = kiosk;
     bool fsWasDown  = false;
-    int  winX = 0, winY = 0, winW = 0, winH = 0;
+    int  winX = 100, winY = 100, winW = 768, winH = 576;
+    auto toggleFullscreen = [&]() {
+        if (!fullscreen) {
+            glfwGetWindowPos(win, &winX, &winY);
+            glfwGetWindowSize(win, &winW, &winH);
+            GLFWmonitor* mon = glfwGetPrimaryMonitor();
+            const GLFWvidmode* mode = glfwGetVideoMode(mon);
+            glfwSetWindowMonitor(win, mon, 0, 0, mode->width, mode->height,
+                                 mode->refreshRate);
+        } else {
+            glfwSetWindowMonitor(win, nullptr, winX, winY, winW, winH, 0);
+        }
+        fullscreen = !fullscreen;
+        // Certains pilotes perdent le réglage vsync au changement de mode.
+        glfwSwapInterval(1);
+        // En borne, le curseur ne reste masqué qu'en plein écran.
+        if (kiosk)
+            glfwSetInputMode(win, GLFW_CURSOR,
+                             fullscreen ? GLFW_CURSOR_HIDDEN
+                                        : GLFW_CURSOR_NORMAL);
+    };
+
+    // Menu borne : liste des jeux du dossier de la ROM chargée + actions.
+    // Ouverture : F9 partout ; Start manette et Échap en mode borne.
+    KioskMenu menu;
+    {
+        std::string dir = titlePath;
+        const std::string::size_type slash = dir.find_last_of("/\\");
+        menu.setRomDir(slash == std::string::npos ? "."
+                                                  : dir.substr(0, slash));
+    }
+    bool menuToggleWasDown = false;
+    if (openMenu)
+        menu.open();
+
+    long displayedFrames = 0;   // compteur d'itérations d'affichage (--shot-at)
+
+    // Pile d'effets CRT : initialisée paresseusement à la première activation
+    // (--crt, --kiosk, ou touche C). En cas d'échec (shader/FBO), process()
+    // renvoie 0 et on retombe sur le rendu brut.
+    CrtEffectStack crt;
+    bool crtWasDown = false;
+    if (crtOn && !crt.initialize())
+        std::fprintf(stderr, "crt: unavailable (%s), raw output\n",
+                     crt.lastError().c_str());
 
     // --- Cadencement : une trame dure lignes×228 cycles à l'horloge de la
     // région (NTSC ~16,69 ms / 59,92 Hz ; PAL ~20,12 ms / 49,70 Hz). On émule
@@ -236,69 +348,129 @@ int main(int argc, char** argv)
     while (!glfwWindowShouldClose(win)) {
         glfwPollEvents();
 
-        // Échap = quitter.
-        if (glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        // Échap : bureau = quitter ; borne = ouvrir/fermer le menu (une borne
+        // ne doit pas être tuable d'une touche — Quit passe par le menu).
+        const bool escDown = glfwGetKey(win, GLFW_KEY_ESCAPE) == GLFW_PRESS;
+        if (escDown && !kiosk)
             glfwSetWindowShouldClose(win, GLFW_TRUE);
 
-        // R = reset matériel de la console.
-        if (glfwGetKey(win, GLFW_KEY_R) == GLFW_PRESS)
+        // R = reset matériel de la console (pas pendant le menu).
+        if (!menu.isOpen() && glfwGetKey(win, GLFW_KEY_R) == GLFW_PRESS)
             machine.reset();
 
         // F = bascule plein écran (sur FRONT d'appui).
         const bool fsDown = glfwGetKey(win, GLFW_KEY_F) == GLFW_PRESS;
-        if (fsDown && !fsWasDown) {
-            if (!fullscreen) {
-                glfwGetWindowPos(win, &winX, &winY);
-                glfwGetWindowSize(win, &winW, &winH);
-                GLFWmonitor* mon = glfwGetPrimaryMonitor();
-                const GLFWvidmode* mode = glfwGetVideoMode(mon);
-                glfwSetWindowMonitor(win, mon, 0, 0, mode->width, mode->height,
-                                     mode->refreshRate);
-            } else {
-                glfwSetWindowMonitor(win, nullptr, winX, winY, winW, winH, 0);
-            }
-            fullscreen = !fullscreen;
-            // Certains pilotes perdent le réglage vsync au changement de mode.
-            glfwSwapInterval(1);
-        }
+        if (fsDown && !fsWasDown)
+            toggleFullscreen();
         fsWasDown = fsDown;
 
+        // C = bascule du filtre CRT (sur FRONT d'appui).
+        const bool crtDown = glfwGetKey(win, GLFW_KEY_C) == GLFW_PRESS;
+        if (crtDown && !crtWasDown) {
+            crtOn = !crtOn;
+            if (crtOn && !crt.initialize()) {
+                std::fprintf(stderr, "crt: unavailable (%s), raw output\n",
+                             crt.lastError().c_str());
+                crtOn = false;
+            }
+        }
+        crtWasDown = crtDown;
+
         // Manettes USB : slot GLFW 1 -> pad 1 (fusionné avec le clavier),
-        // slot 2 -> pad 2. Le bouton Start de l'une OU l'autre = Pause.
+        // slot 2 -> pad 2.
         bool startDown = false;
-        const u8 pad0 = readPadMask(win) |
-                        readGamepadMask(GLFW_JOYSTICK_1, &startDown);
-        const u8 pad1 = readGamepadMask(GLFW_JOYSTICK_2, &startDown);
-        machine.io.setPad(0, pad0);
-        machine.io.setPad(1, pad1);
+        const u8 kbMask = readPadMask(win);
+        const u8 gp0    = readGamepadMask(GLFW_JOYSTICK_1, &startDown);
+        const u8 gp1    = readGamepadMask(GLFW_JOYSTICK_2, &startDown);
+        const bool enterDown = glfwGetKey(win, GLFW_KEY_ENTER) == GLFW_PRESS;
 
-        // Entrée ou Start = bouton Pause de la console : NMI sur FRONT d'appui.
-        const bool pauseDown =
-            glfwGetKey(win, GLFW_KEY_ENTER) == GLFW_PRESS || startDown;
-        if (pauseDown && !pauseWasDown)
-            machine.pressPause();
-        pauseWasDown = pauseDown;
+        // Ouverture/fermeture du menu borne : Start manette ou F9, partout ;
+        // Échap aussi en mode borne. Start n'atteint donc jamais le jeu — le
+        // bouton Pause de la console reste la touche Entrée.
+        const bool menuToggleDown =
+            startDown ||
+            glfwGetKey(win, GLFW_KEY_F9) == GLFW_PRESS ||
+            (kiosk && escDown);
+        if (menuToggleDown && !menuToggleWasDown) {
+            if (menu.isOpen()) menu.close();
+            else               menu.open();
+        }
+        menuToggleWasDown = menuToggleDown;
 
-        // Émule les trames arrivées à échéance (0 sur un écran plus rapide
-        // que 60 Hz, parfois 2 pour rattraper un hoquet — borné pour ne pas
-        // spiraler). Après un vrai décrochage (fenêtre déplacée, mise en
-        // veille…), on abandonne le retard plutôt que de le rattraper.
-        double now = glfwGetTime();
-        if (now - nextFrameDue > 0.25)
-            nextFrameDue = now;
-        for (int burst = 0; burst < 4 && now >= nextFrameDue; ++burst) {
-            machine.runFrame();
-            nextFrameDue += framePeriod;
-            now = glfwGetTime();
+        if (menu.isOpen()) {
+            // Jeu en PAUSE : manettes relâchées côté console, pas de trame
+            // émulée. Le menu navigue avec pads + clavier fusionnés.
+            machine.io.setPad(0, 0);
+            machine.io.setPad(1, 0);
+            pauseWasDown = true;   // avale le front Pause à la fermeture
 
-            // Vidange de l'anneau du PSG vers la sortie audio (ou dans le
-            // vide si aucun backend : il ne faut pas le laisser saturer).
-            int n;
-            while ((n = machine.psg.readSamples(
-                        audioScratch, static_cast<int>(sizeof(audioScratch) /
-                                                       sizeof(audioScratch[0])))) > 0) {
-                if (audioOn)
-                    audio.push(audioScratch, n);
+            KioskMenu::Input mi;
+            const u8 all = static_cast<u8>(kbMask | gp0 | gp1);
+            mi.up    = (all & Io::Up)    != 0;
+            mi.down  = (all & Io::Down)  != 0;
+            mi.left  = (all & Io::Left)  != 0;
+            mi.right = (all & Io::Right) != 0;
+            mi.fire  = (all & Io::B1) != 0 || enterDown;
+
+            switch (menu.update(mi)) {
+            case KioskMenu::Action::LoadRom:
+                // Insérer une cartouche = sauvegarde de l'ancienne RAM puis
+                // power-cycle (le BIOS éventuel reste en place et boote le jeu).
+                machine.cart.persistSaveRam();
+                if (machine.loadRom(menu.chosenRom())) {
+                    glfwSetWindowTitle(
+                        win, ("Sesame — Master System — " +
+                              baseName(menu.chosenRom())).c_str());
+                } else {
+                    std::fprintf(stderr, "error: cannot load ROM '%s'\n",
+                                 menu.chosenRom().c_str());
+                }
+                break;
+            case KioskMenu::Action::Restart:
+                machine.reset();
+                break;
+            case KioskMenu::Action::ToggleFullscreen:
+                toggleFullscreen();
+                break;
+            case KioskMenu::Action::Quit:
+                glfwSetWindowShouldClose(win, GLFW_TRUE);
+                break;
+            case KioskMenu::Action::Resume:
+            case KioskMenu::Action::None:
+                break;
+            }
+        } else {
+            machine.io.setPad(0, static_cast<u8>(kbMask | gp0));
+            machine.io.setPad(1, gp1);
+
+            // Entrée = bouton Pause de la console : NMI sur FRONT.
+            const bool pauseDown = enterDown;
+            if (pauseDown && !pauseWasDown)
+                machine.pressPause();
+            pauseWasDown = pauseDown;
+
+            // Émule les trames arrivées à échéance (0 sur un écran plus
+            // rapide que 60 Hz, parfois 2 pour rattraper un hoquet — borné
+            // pour ne pas spiraler). Après un vrai décrochage (fenêtre
+            // déplacée, veille, menu ouvert…), on abandonne le retard.
+            double now = glfwGetTime();
+            if (now - nextFrameDue > 0.25)
+                nextFrameDue = now;
+            for (int burst = 0; burst < 4 && now >= nextFrameDue; ++burst) {
+                machine.runFrame();
+                nextFrameDue += framePeriod;
+                now = glfwGetTime();
+
+                // Vidange de l'anneau du PSG vers la sortie audio (ou dans le
+                // vide si aucun backend : il ne faut pas le laisser saturer).
+                int n;
+                while ((n = machine.psg.readSamples(
+                            audioScratch,
+                            static_cast<int>(sizeof(audioScratch) /
+                                             sizeof(audioScratch[0])))) > 0) {
+                    if (audioOn)
+                        audio.push(audioScratch, n);
+                }
             }
         }
 
@@ -310,13 +482,25 @@ int main(int argc, char** argv)
         // Rendu : fond noir + quad texturé 4:3 letterboxé.
         int fbW = 0, fbH = 0;
         glfwGetFramebufferSize(win, &fbW, &fbH);
-        glViewport(0, 0, fbW, fbH);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
 
         int vx, vy, vw, vh;
         computeViewport(fbW, fbH, vx, vy, vw, vh);
+
+        // Passe CRT optionnelle : transforme la texture SMS brute en écran
+        // « verre » rendu à la taille du viewport. En cas d'échec (FBO refusé),
+        // process() renvoie 0 et on présente la texture brute.
+        GLuint drawTex = tex;
+        if (crtOn && crt.available()) {
+            if (const unsigned int out =
+                    crt.process(tex, Vdp::kWidth, Vdp::kHeight, vw, vh))
+                drawTex = out;
+        }
+
+        glViewport(0, 0, fbW, fbH);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
         glViewport(vx, vy, vw, vh);
+        glBindTexture(GL_TEXTURE_2D, drawTex);
 
         glMatrixMode(GL_PROJECTION);
         glLoadIdentity();
@@ -332,6 +516,29 @@ int main(int argc, char** argv)
         glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f,  1.0f);
         glEnd();
         glDisable(GL_TEXTURE_2D);
+
+        // Menu borne par-dessus le jeu figé (net, hors passe CRT).
+        menu.render(fbW, fbH, fullscreen);
+
+        // --shot-at : relit le framebuffer GL (bas vers haut) et écrit un PPM.
+        // Compte les trames AFFICHÉES (pas émulées) : la capture fonctionne
+        // aussi quand le jeu est en pause derrière le menu borne.
+        ++displayedFrames;
+        if (shotPath && displayedFrames >= shotAtFrame) {
+            std::vector<unsigned char> px(
+                static_cast<size_t>(fbW) * fbH * 3);
+            glReadPixels(0, 0, fbW, fbH, GL_RGB, GL_UNSIGNED_BYTE, px.data());
+            if (FILE* f = std::fopen(shotPath, "wb")) {
+                std::fprintf(f, "P6\n%d %d\n255\n", fbW, fbH);
+                for (int y = fbH - 1; y >= 0; --y)  // GL est bas->haut
+                    std::fwrite(&px[static_cast<size_t>(y) * fbW * 3], 1,
+                                static_cast<size_t>(fbW) * 3, f);
+                std::fclose(f);
+                std::fprintf(stderr, "shot: wrote %s (%dx%d)\n",
+                             shotPath, fbW, fbH);
+            }
+            shotPath = nullptr;  // une seule capture
+        }
 
         glfwSwapBuffers(win);
 

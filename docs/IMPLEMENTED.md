@@ -48,7 +48,20 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   --shot-every, --sdsc, --wav, --pause-at
 - `sesame` (GLFW/OpenGL) : affichage 4:3 redimensionnable, plein écran
   (touche F), clavier, Pause/Reset, --bios, --pal ;
+  filtre CRT en une passe FBO (`src/gui/CrtEffectStack.cpp`, porté de
+  NeoST/POM2 : baril, scanlines, shadow mask, vignette, persistance
+  phosphore ; GLSL 120→150 avec repli, no-op sûr si le pilote refuse) —
+  `--crt` ou touche C ; mode borne `--kiosk [--kiosk-monitor N]` (plein
+  écran exclusif, curseur masqué, CRT activé) avec menu in-game disponible
+  partout (`src/gui/KioskMenu.cpp`, Start manette ou F9 — Échap aussi en
+  borne : jeu en pause, liste des .sms
+  du dossier de la ROM — hors BIOS —, Resume/Restart/Desktop/Quit ; rendu
+  immediate mode, police 8×8 font8x8 vendorisée domaine public ; `--menu`
+  l'ouvre au lancement) ; en borne, Échap ne quitte jamais ;
+  `--shot-at N FILE.ppm` capture le framebuffer GL affiché (trames
+  affichées, menu compris — validation du rendu) ;
   manettes USB (API gamepad GLFW : slots 1/2 -> pads 1/2, D-pad ou stick,
-  A/X = bouton 1, B/Y = bouton 2, Start = Pause) ;
+  A/X = bouton 1, B/Y = bouton 2, Start = menu kiosk ; Pause console =
+  touche Entrée) ;
   audio temps réel via CoreAudio/AudioQueue sur macOS (`src/gui/AudioOut.cpp`,
   anneau ~185 ms, 4 tampons de 512 échantillons) — Linux : muet (TODO ALSA)

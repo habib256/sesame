@@ -20,6 +20,8 @@ the GUI; the `Bus` class *is* the memory map.
 - Headless frontend: deterministic traces, PPM screenshots, WAV dump
 - Windowed frontend: GLFW3 + OpenGL, real-time audio (CoreAudio on macOS),
   USB gamepads (GLFW gamepad API)
+- CRT filter (single-pass shader: barrel, scanlines, shadow mask, phosphor
+  persistence) and kiosk mode (exclusive fullscreen, hidden cursor)
 
 ## Build
 
@@ -37,16 +39,30 @@ Targets: `sesame` (GUI, requires GLFW3 — `brew install glfw`),
 ./build/sesame game.sms
 ./build/sesame game.sms --bios bios.sms   # boot through a BIOS image
 ./build/sesame game.sms --pal             # European console (50 Hz)
+./build/sesame game.sms --crt             # CRT filter on from the start
+./build/sesame game.sms --kiosk           # arcade-cabinet mode: exclusive
+                                          # fullscreen, hidden cursor, CRT
 ```
+
+Kiosk options: `--kiosk-monitor N` picks the target display (0 = primary),
+`--menu` opens the in-game menu at startup.
+
+The **in-game menu** (gamepad Start or `F9` anywhere; also `Esc` in kiosk
+mode) pauses the game over a fullscreen overlay: pick another game from the
+ROM folder (inserting a cartridge power-cycles the console, through the BIOS
+if one is loaded), restart the machine, toggle fullscreen, or quit — in kiosk
+mode `Esc` alone never kills the cabinet. The console's Pause button is the
+`Enter` key.
 
 A file whose name contains "BIOS" is loaded into the BIOS slot automatically
 (with an empty cartridge slot, like a console with no cartridge inserted).
 
 Keys: arrows = D-pad, `Z`/`W` = button 1, `X` = button 2, `Enter` = Pause,
-`R` = reset, `F` = fullscreen, `Esc` = quit.
+`R` = reset, `F` = fullscreen, `C` = CRT filter, `F9` = in-game menu,
+`Esc` = quit (desktop) / menu (kiosk).
 Battery-backed cartridge RAM is persisted next to the ROM as `<rom>.sav`.
 Gamepads: GLFW slots 1/2 map to pads 1/2 — D-pad or left stick, `A`/`X` =
-button 1, `B`/`Y` = button 2, `Start` = Pause.
+button 1, `B`/`Y` = button 2, `Start` = in-game menu.
 
 ## Headless & tests
 

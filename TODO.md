@@ -31,7 +31,14 @@
 ## Frontends
 - [x] Manette USB (API gamepad GLFW, 2 pads + Start = Pause, 2026-08)
 - [x] Redimensionnement + plein écran (touche F, 2026-08)
-- [ ] Filtre CRT
+- [x] Filtre CRT (pile d'effets portée de NeoST/POM2 : baril, scanlines,
+      shadow mask, persistance… — --crt / touche C, 2026-08)
+- [x] Mode kiosk (--kiosk [--kiosk-monitor N] : plein écran exclusif,
+      curseur masqué, CRT activé, 2026-08) + menu in-game (Start/F9 :
+      liste de jeux, restart, desktop, quit — 2026-08)
+- [ ] Menu kiosk : dossiers ROM additionnels + affectation des manettes
+      (parité NeoST)
+- [ ] Presets CRT configurables (--crt-preset / fichier de config)
 - [ ] Build WebAssembly
 
 ## Outils
