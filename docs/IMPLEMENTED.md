@@ -61,7 +61,7 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   `--shot-at N FILE.ppm` capture le framebuffer GL affiché (trames
   affichées, menu compris — validation du rendu) ;
   manettes USB (API gamepad GLFW : slots 1/2 -> pads 1/2, D-pad ou stick,
-  A/X = bouton 1, B/Y = bouton 2, Start = menu kiosk ; Pause console =
-  touche Entrée) ;
+  A/X = bouton 1, B/Y = bouton 2, Start = menu kiosk, Select = Pause
+  console — aussi sur la touche Entrée) ;
   audio temps réel via CoreAudio/AudioQueue sur macOS (`src/gui/AudioOut.cpp`,
   anneau ~185 ms, 4 tampons de 512 échantillons) — Linux : muet (TODO ALSA)

@@ -74,12 +74,13 @@ u8 readPadMask(GLFWwindow* win)
 }
 
 // -----------------------------------------------------------------------------
-//  Lecture d'une manette USB -> masque de boutons SMS + état du bouton Start.
-//  API « gamepad » de GLFW (mappings SDL intégrés) : D-pad OU stick gauche =
-//  directions, A/X = bouton 1, B/Y = bouton 2, Start = menu kiosk.
+//  Lecture d'une manette USB -> masque de boutons SMS + état des boutons
+//  Start et Select. API « gamepad » de GLFW (mappings SDL intégrés) : D-pad
+//  OU stick gauche = directions, A/X = bouton 1, B/Y = bouton 2,
+//  Start = menu kiosk, Select (Back) = bouton Pause de la console.
 //  Retourne 0 si aucune manette reconnue sur ce slot.
 // -----------------------------------------------------------------------------
-u8 readGamepadMask(int jid, bool* startDown)
+u8 readGamepadMask(int jid, bool* startDown, bool* selectDown)
 {
     GLFWgamepadstate st;
     if (!glfwGetGamepadState(jid, &st))
@@ -105,6 +106,8 @@ u8 readGamepadMask(int jid, bool* startDown)
 
     if (st.buttons[GLFW_GAMEPAD_BUTTON_START] == GLFW_PRESS)
         *startDown = true;
+    if (st.buttons[GLFW_GAMEPAD_BUTTON_BACK] == GLFW_PRESS)
+        *selectDown = true;
     return mask;
 }
 
@@ -378,10 +381,10 @@ int main(int argc, char** argv)
 
         // Manettes USB : slot GLFW 1 -> pad 1 (fusionné avec le clavier),
         // slot 2 -> pad 2.
-        bool startDown = false;
+        bool startDown = false, selectDown = false;
         const u8 kbMask = readPadMask(win);
-        const u8 gp0    = readGamepadMask(GLFW_JOYSTICK_1, &startDown);
-        const u8 gp1    = readGamepadMask(GLFW_JOYSTICK_2, &startDown);
+        const u8 gp0 = readGamepadMask(GLFW_JOYSTICK_1, &startDown, &selectDown);
+        const u8 gp1 = readGamepadMask(GLFW_JOYSTICK_2, &startDown, &selectDown);
         const bool enterDown = glfwGetKey(win, GLFW_KEY_ENTER) == GLFW_PRESS;
 
         // Ouverture/fermeture du menu borne : Start manette ou F9, partout ;
@@ -443,8 +446,9 @@ int main(int argc, char** argv)
             machine.io.setPad(0, static_cast<u8>(kbMask | gp0));
             machine.io.setPad(1, gp1);
 
-            // Entrée = bouton Pause de la console : NMI sur FRONT.
-            const bool pauseDown = enterDown;
+            // Entrée ou Select manette = bouton Pause de la console (NMI sur
+            // FRONT).
+            const bool pauseDown = enterDown || selectDown;
             if (pauseDown && !pauseWasDown)
                 machine.pressPause();
             pauseWasDown = pauseDown;

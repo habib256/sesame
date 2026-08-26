@@ -62,7 +62,8 @@ Keys: arrows = D-pad, `Z`/`W` = button 1, `X` = button 2, `Enter` = Pause,
 `Esc` = quit (desktop) / menu (kiosk).
 Battery-backed cartridge RAM is persisted next to the ROM as `<rom>.sav`.
 Gamepads: GLFW slots 1/2 map to pads 1/2 — D-pad or left stick, `A`/`X` =
-button 1, `B`/`Y` = button 2, `Start` = in-game menu.
+button 1, `B`/`Y` = button 2, `Start` = in-game menu, `Select` = console
+Pause.
 
 ## Headless & tests
 
