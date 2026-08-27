@@ -131,6 +131,11 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   --shot-every, --sdsc, --wav, --pause-at
 - `sesame` (GLFW/OpenGL) : affichage 4:3 redimensionnable, plein écran
   (touche F), clavier, Pause/Reset, --bios, --pal ;
+  BIOS auto-détecté au lancement : sans `--bios`, une image `.sms` dont le
+  nom contient « BIOS » dans le dossier de la ROM est chargée dans le slot
+  BIOS (première par ordre alphabétique ; `--no-bios` désactive ; jamais
+  pour les modèles Game Gear) — la console démarre sur son BIOS qui boote
+  ensuite la cartouche, comme le vrai matériel ;
   filtre CRT en une passe FBO (`src/gui/CrtEffectStack.cpp`, porté de
   NeoST/POM2 : baril, scanlines, shadow mask, vignette, persistance
   phosphore ; GLSL 120→150 avec repli, no-op sûr si le pilote refuse) —

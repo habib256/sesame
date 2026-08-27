@@ -27,9 +27,11 @@
 
 #include <GLFW/glfw3.h>
 
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -142,8 +144,9 @@ int main(int argc, char** argv)
 {
     if (argc < 2) {
         std::fprintf(stderr,
-                     "usage: sesame <rom.sms|rom.gg|rom.sg> [--bios FILE] [--pal] "
-                     "[--crt] [--kiosk] [--kiosk-monitor N]\n");
+                     "usage: sesame <rom.sms|rom.gg|rom.sg> [--bios FILE] "
+                     "[--no-bios] [--pal] [--gg] [--crt] [--kiosk] "
+                     "[--kiosk-monitor N]\n");
         std::fprintf(stderr, "error: no ROM file given\n");
         return 1;
     }
@@ -158,6 +161,7 @@ int main(int argc, char** argv)
     const char* shotPath     = nullptr;
     bool        openMenu     = false;    // --menu : menu borne ouvert au départ
     bool        forceGg      = false;    // --gg : matériel Game Gear forcé
+    bool        noBios       = false;    // --no-bios : pas d'auto-détection
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--menu") == 0) {
             openMenu = true;
@@ -176,6 +180,8 @@ int main(int argc, char** argv)
             // Matériel Game Gear forcé : une cartouche SMS tourne en mode
             // compatibilité (palette SMS, fenêtre LCD 160x144).
             forceGg = true;
+        } else if (std::strcmp(argv[i], "--no-bios") == 0) {
+            noBios = true;
         } else if (std::strcmp(argv[i], "--crt") == 0) {
             crtOn = true;
         } else if (std::strcmp(argv[i], "--kiosk") == 0) {
@@ -207,6 +213,38 @@ int main(int argc, char** argv)
     if (romPath && !biosPath && looksLikeBios(romPath)) {
         biosPath = romPath;
         romPath  = nullptr;
+    }
+
+    // Pas de --bios ? On cherche une image BIOS dans le dossier de la ROM
+    // (nom contenant « BIOS », extension .sms) — comme une vraie console,
+    // qui démarre toujours sur son BIOS. --no-bios s'en passe. Le BIOS
+    // détecte et boote ensuite la cartouche lui-même (contrôle mémoire
+    // 0x3E réel). Modèles Game Gear : pas de BIOS SMS.
+    std::string autoBios;
+    std::string romExt = romPath ? romPath : "";
+    if (auto d = romExt.rfind('.'); d != std::string::npos)
+        romExt = romExt.substr(d);
+    for (char& c : romExt) c = (char)std::tolower((unsigned char)c);
+    if (!biosPath && !noBios && romPath && !forceGg && romExt == ".sms") {
+        std::string dir = romPath;
+        const auto slash = dir.find_last_of("/\\");
+        dir = (slash == std::string::npos) ? "." : dir.substr(0, slash);
+        std::error_code ec;
+        for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
+            if (!e.is_regular_file(ec)) continue;
+            const std::string name = e.path().filename().string();
+            std::string ext = e.path().extension().string();
+            for (char& c : ext) c = (char)std::tolower((unsigned char)c);
+            if (ext != ".sms" || !looksLikeBios(name.c_str())) continue;
+            const std::string p = e.path().string();
+            // Choix stable : le premier par ordre alphabétique.
+            if (autoBios.empty() || p < autoBios)
+                autoBios = p;
+        }
+        if (!autoBios.empty()) {
+            biosPath = autoBios.c_str();
+            std::fprintf(stderr, "bios: auto-detected %s\n", biosPath);
+        }
     }
 
     // --- Machine -------------------------------------------------------------
