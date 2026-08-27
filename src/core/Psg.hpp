@@ -16,11 +16,17 @@
 // =============================================================================
 #include "Types.hpp"
 
+class StateIO;
+
 class Psg {
 public:
     static constexpr int kSampleRate = 44100;
 
     void reset();
+
+    // Save-state : registres et synthèse. L'anneau de sortie n'est PAS
+    // sérialisé (audio en vol) : il est vidé au chargement.
+    void serialize(StateIO& s);
 
     // Horloge CPU/puce en Hz (NTSC ou PAL) — pilote le rééchantillonnage.
     // Réglage matériel poussé par Machine::setRegion, survit au reset.

@@ -15,6 +15,8 @@
 //     0x8000-0xBFFF, bit 2 = choix de la banque (0 ou 1).
 // =============================================================================
 #include "Cartridge.hpp"
+
+#include "StateIO.hpp"
 #include <fstream>
 
 bool Cartridge::load(const std::string& path) {
@@ -144,4 +146,17 @@ void Cartridge::writeMapper(u16 addr, u8 v) {
     case 0xFFFF: pageReg[2] = v; break;  // fenêtre 0x8000-0xBFFF
     default: break;
     }
+}
+
+// -----------------------------------------------------------------------------
+//  Save-state — registres du mapper + RAM cartouche. La ROM n'est pas
+//  sérialisée (elle vient du fichier) ; au chargement la RAM est marquée
+//  modifiée pour que la persistance .sav reparte de l'état restauré.
+// -----------------------------------------------------------------------------
+void Cartridge::serialize(StateIO& s) {
+    s.bytes(pageReg, sizeof(pageReg));
+    s.u8v(ramControl);
+    s.bytes(&cartRam[0][0], sizeof(cartRam));
+    if (s.loading())
+        saveRamDirty = true;
 }

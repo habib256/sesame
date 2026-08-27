@@ -32,7 +32,11 @@ et contraintes de licence détaillées là-bas).
       Gearsystem, jgenesis, `ym2413` de MAME si BSD-3
 
 ## Machine
-- [ ] Save-states
+- [x] Save-states — sérialiseur symétrique `StateIO`, fichier versionné
+      « SESAMEST » (modèle/région vérifiés), pris en frontière de trame ;
+      GUI : F5/F7 -> `<rom>.state` ; headless : `--state-save N FILE` /
+      `--state-load FILE` ; validé pixel-perfect et octet-perfect audio à
+      travers la coupe, processus séparés (2026-08)
 - [x] BIOS optionnel + contrôle mémoire 0x3E réel (2026-08 ; reste : bouton
       Reset console et lecture-arrière 0x3E côté SMS1)
 - [x] Game Gear — mode natif : auto-détection `.gg`, CRAM 12 bits écrite

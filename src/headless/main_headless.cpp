@@ -46,6 +46,8 @@ void printUsage(FILE* out)
         "  --wav FILE            record PSG audio (44100 Hz stereo s16 WAV;\n"
         "                        both channels identical on SMS, panned on GG)\n"
         "  --pause-at N          press the Pause button (NMI) at frame N\n"
+        "  --state-save N FILE   save a machine state to FILE after frame N\n"
+        "  --state-load FILE     load a machine state before the first frame\n"
         "  --help                show this help and exit\n");
 }
 
@@ -212,6 +214,9 @@ int main(int argc, char** argv)
     const char* exitSdsc      = nullptr;
     const char* wavPath       = nullptr;
     long        pauseAt       = -1;       // -1 = jamais
+    const char* stateLoadPath = nullptr;  // --state-load : avant la 1re trame
+    long        stateSaveAt   = -1;       // --state-save : après la trame N
+    const char* stateSavePath = nullptr;
 
     for (int i = 2; i < argc; ++i) {
         const char* a = argv[i];
@@ -251,6 +256,19 @@ int main(int argc, char** argv)
                 return 1;
             }
             shotPrefix = argv[++i];
+        } else if (std::strcmp(a, "--state-load") == 0) {
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "error: --state-load requires a file name\n");
+                return 1;
+            }
+            stateLoadPath = argv[++i];
+        } else if (std::strcmp(a, "--state-save") == 0) {
+            stateSaveAt = parseCount(a, (i + 1 < argc) ? argv[++i] : nullptr);
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "error: --state-save requires N and FILE\n");
+                return 1;
+            }
+            stateSavePath = argv[++i];
         } else if (std::strcmp(a, "--sav") == 0) {
             sav = true;
         } else if (std::strcmp(a, "--sdsc") == 0) {
@@ -315,6 +333,14 @@ int main(int argc, char** argv)
 
     machine.io.sdscEnabled = sdsc;
 
+    // --state-load : restaure AVANT la première trame (le fichier doit
+    // correspondre au modèle et à la région de la machine courante).
+    if (stateLoadPath) {
+        if (!machine.loadState(stateLoadPath))
+            return 1;
+        std::fprintf(stderr, "state: loaded %s\n", stateLoadPath);
+    }
+
     // --- Fichiers de sortie --------------------------------------------------
     FILE* traceFile = nullptr;
     if (tracePath) {
@@ -352,6 +378,14 @@ int main(int argc, char** argv)
             machine.pressPause();
 
         machine.runFrame();
+
+        // --state-save : capture en frontière de trame, après la trame N.
+        if (stateSavePath && f + 1 == stateSaveAt) {
+            if (!machine.saveState(stateSavePath))
+                return 1;
+            std::fprintf(stderr, "state: saved %s after frame %ld\n",
+                         stateSavePath, f + 1);
+        }
 
         if (exitSdsc) {
             const std::string& log = machine.io.sdscLog();

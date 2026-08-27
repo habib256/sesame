@@ -30,6 +30,8 @@
 // =============================================================================
 #include "Psg.hpp"
 
+#include "StateIO.hpp"
+
 namespace {
 
 // Diviseur interne : un tick PSG toutes les 16 périodes d'horloge.
@@ -247,4 +249,30 @@ int Psg::readSamples(s16* out, int maxFrames) {
         ++n;
     }
     return n;
+}
+
+// -----------------------------------------------------------------------------
+//  Save-state — registres et état de synthèse. L'anneau de sortie (audio en
+//  vol vers le frontend) n'est pas sérialisé : il est vidé au chargement.
+// -----------------------------------------------------------------------------
+void Psg::serialize(StateIO& s) {
+    s.u8v(stereoMask);
+    s.u8v(latchedChannel);
+    s.boolv(latchedIsVolume);
+    for (int i = 0; i < 4; ++i) s.u16v(toneReg[i]);
+    s.bytes(volume, sizeof(volume));
+    for (int i = 0; i < 4; ++i) s.s16v(toneCounter[i]);
+    s.bytes(toneOut, sizeof(toneOut));
+    s.u16v(noiseLfsr);
+    s.u8v(noiseFF);
+    s.u64v(clockAcc);
+    s.u32v(resampleAcc);
+    s.u64v(sampleIndex);
+    for (int v = 0; v < 2; ++v) {
+        s.s16v(lastAmp[v]);
+        s.s32v(blipSum[v]);
+        for (int i = 0; i < kBlipBufSize; ++i) s.s32v(blipBuf[v][i]);
+    }
+    if (s.loading())
+        ringR = ringW = 0;
 }

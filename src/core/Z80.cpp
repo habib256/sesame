@@ -27,6 +27,8 @@
 //     dans un registre, ED "NONI" traités comme des NOP de 8 cycles.
 // =============================================================================
 #include "Z80.hpp"
+
+#include "StateIO.hpp"
 #include "Bus.hpp"
 
 namespace {
@@ -994,4 +996,18 @@ int Z80::acceptIrq() {
     regs.pc = 0x0038;
     wz = regs.pc;
     return 13;
+}
+
+// -----------------------------------------------------------------------------
+//  Save-state — liste symétrique de tout l'état interne (voir StateIO.hpp).
+// -----------------------------------------------------------------------------
+void Z80::serialize(StateIO& s) {
+    s.u16v(regs.af);  s.u16v(regs.bc);  s.u16v(regs.de);  s.u16v(regs.hl);
+    s.u16v(regs.af2); s.u16v(regs.bc2); s.u16v(regs.de2); s.u16v(regs.hl2);
+    s.u16v(regs.ix);  s.u16v(regs.iy);  s.u16v(regs.sp);  s.u16v(regs.pc);
+    s.u8v(regs.i);    s.u8v(regs.r);    s.u8v(regs.im);
+    s.boolv(regs.iff1); s.boolv(regs.iff2); s.boolv(regs.halted);
+    s.u64v(cycles);
+    s.boolv(irqLine); s.boolv(nmiPending); s.boolv(eiDelay);
+    s.u16v(wz);
 }

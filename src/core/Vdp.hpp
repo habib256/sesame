@@ -13,6 +13,8 @@
 // =============================================================================
 #include "Types.hpp"
 
+class StateIO;
+
 class Vdp {
 public:
     static constexpr int kWidth  = 256;
@@ -28,6 +30,11 @@ public:
     static constexpr int kGgOffsetY = (kHeight - kGgHeight) / 2;  // 24
 
     void reset();
+
+    // Save-state : VRAM/CRAM/registres et verrous internes. Le framebuffer
+    // n'est PAS sérialisé : les états sont pris en frontière de trame et la
+    // trame suivante le reconstruit ligne à ligne.
+    void serialize(StateIO& s);
 
     // Norme vidéo : réglage matériel du frontend, survit au reset.
     void setRegion(Region r) { region = r; }

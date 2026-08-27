@@ -351,6 +351,19 @@ int main(int argc, char** argv)
         machine.vdp.linesPerFrame() / machine.cpuClock();
     double nextFrameDue = glfwGetTime();
 
+    // Chemin de la ROM courante (mis à jour par le menu borne) et fichier
+    // d'état associé : <rom sans extension>.state, à côté de la ROM.
+    std::string currentRomPath = romPath ? romPath : "";
+    auto statePathFor = [](const std::string& p) {
+        const auto dot   = p.rfind('.');
+        const auto slash = p.find_last_of("/\\");
+        if (dot == std::string::npos ||
+            (slash != std::string::npos && dot < slash))
+            return p + ".state";
+        return p.substr(0, dot) + ".state";
+    };
+    bool f5WasDown = false, f7WasDown = false;
+
     // --- Boucle principale ---------------------------------------------------
     while (!glfwWindowShouldClose(win)) {
         glfwPollEvents();
@@ -382,6 +395,21 @@ int main(int argc, char** argv)
             }
         }
         crtWasDown = crtDown;
+
+        // F5/F7 = save/load state dans <rom>.state (sur FRONT, pas pendant
+        // le menu). L'émulation étant en frontière de trame ici, l'état est
+        // pris au bon moment (le framebuffer n'est pas sérialisé).
+        const bool f5Down = glfwGetKey(win, GLFW_KEY_F5) == GLFW_PRESS;
+        const bool f7Down = glfwGetKey(win, GLFW_KEY_F7) == GLFW_PRESS;
+        if (!menu.isOpen() && !currentRomPath.empty()) {
+            const std::string statePath = statePathFor(currentRomPath);
+            if (f5Down && !f5WasDown && machine.saveState(statePath))
+                std::fprintf(stderr, "state: saved %s\n", statePath.c_str());
+            if (f7Down && !f7WasDown && !machine.loadState(statePath))
+                machine.reset();  // chargement raté : état mixte, on repart
+        }
+        f5WasDown = f5Down;
+        f7WasDown = f7Down;
 
         // Manettes USB : slot GLFW 1 -> pad 1 (fusionné avec le clavier),
         // slot 2 -> pad 2.
@@ -425,6 +453,7 @@ int main(int argc, char** argv)
                 // power-cycle (le BIOS éventuel reste en place et boote le jeu).
                 machine.cart.persistSaveRam();
                 if (machine.loadRom(menu.chosenRom())) {
+                    currentRomPath = menu.chosenRom();
                     // loadRom() peut changer de modèle (.sms <-> .gg).
                     glfwSetWindowTitle(
                         win, (std::string("Sesame — ") +

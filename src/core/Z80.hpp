@@ -13,12 +13,16 @@
 #include "Types.hpp"
 
 class Bus;
+class StateIO;
 
 class Z80 {
 public:
     explicit Z80(Bus& bus) : bus(bus) { reset(); }
 
     void reset();
+
+    // Save-state : liste symétrique de l'état interne (voir StateIO.hpp).
+    void serialize(StateIO& s);
 
     // Exécute UNE instruction (ou accepte une interruption en attente) et
     // retourne le nombre de cycles machine consommés. En HALT sans interruption,

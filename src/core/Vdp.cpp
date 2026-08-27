@@ -19,6 +19,8 @@
 // =============================================================================
 #include "Vdp.hpp"
 
+#include "StateIO.hpp"
+
 namespace {
 
 // Conversion d'une entrée CRAM 6 bits (--BBGGRR) vers un pixel RGBA tel que
@@ -374,4 +376,27 @@ void Vdp::renderLine(int y) {
     if ((regs[0] & 0x20) != 0) {
         for (int x = 0; x < 8; ++x) dst[x] = border;
     }
+}
+
+// -----------------------------------------------------------------------------
+//  Save-state — VRAM/CRAM/registres et verrous internes. Le framebuffer est
+//  reconstruit ligne à ligne par la trame suivante (états pris en frontière
+//  de trame par les frontends).
+// -----------------------------------------------------------------------------
+void Vdp::serialize(StateIO& s) {
+    s.bytes(vram, sizeof(vram));
+    s.bytes(cram, sizeof(cram));
+    s.bytes(regs, sizeof(regs));
+    s.u8v(cramLatch);
+    s.intv(curLine);
+    s.u16v(addr);
+    s.u8v(code);
+    s.u8v(readBuffer);
+    s.boolv(ctrlLatch);
+    s.u8v(ctrlFirst);
+    s.u8v(status);
+    s.u8v(lineCounter);
+    s.boolv(lineIrq);
+    s.boolv(frameDoneFlag);
+    s.u8v(hLatch);
 }

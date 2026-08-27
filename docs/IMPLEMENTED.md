@@ -65,6 +65,22 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   (`--bios`, ou nom de fichier contenant « BIOS ») ; le BIOS SMS2 à Sonic
   intégré démarre et sait détecter/booter une cartouche.
 
+## Save-states (`src/core/StateIO.hpp`, `Machine::saveState/loadState`)
+- Sérialiseur SYMÉTRIQUE : chaque puce liste ses champs une seule fois dans
+  `serialize(StateIO&)` (écrits en Save, relus en Load — désynchronisation
+  impossible) ; little-endian explicite, portable
+- Fichier versionné : en-tête « SESAMEST » + version + modèle + région,
+  vérifiés au chargement (refus d'un état d'une autre machine)
+- Pris en FRONTIÈRE de trame ; non sérialisés : framebuffer VDP (reconstruit
+  par la trame suivante), anneau audio (vidé), manettes (entrées vivantes),
+  journal SDSC, ROM (vient du fichier chargé) ; RAM cartouche marquée
+  modifiée au chargement (persistance .sav cohérente) ; ~90 Ko par état
+- GUI : F5 = save, F7 = load (`<rom>.state` à côté de la ROM) ;
+  headless : `--state-save N FILE`, `--state-load FILE`
+- Validé : capture à la trame 120 identique octet par octet entre run
+  continu et save-à-60 + reload dans un NOUVEAU processus ; idem pour
+  l'audio WAV de reprise
+
 ## Frontends
 - `sesame-headless` : --bios, --pal, --sav, --frames, --trace, --screenshot,
   --shot-every, --sdsc, --wav, --pause-at

@@ -18,6 +18,8 @@
 #include <string>
 #include <vector>
 
+class StateIO;
+
 class Cartridge {
 public:
     // Charge un fichier .sms ; tolère l'en-tête parasite de 512 octets des
@@ -25,6 +27,11 @@ public:
     bool load(const std::string& path);
 
     void reset();
+
+    // Save-state : registres du mapper + RAM cartouche (PAS la ROM, qui
+    // vient du fichier chargé). Au chargement, la RAM est marquée modifiée
+    // pour que la persistance .sav reparte de l'état restauré.
+    void serialize(StateIO& s);
 
     u8   read(u16 addr);              // 0x0000-0xBFFF
     void write(u16 addr, u8 v);       // 0x8000-0xBFFF : RAM cartouche si activée

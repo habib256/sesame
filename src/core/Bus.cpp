@@ -4,6 +4,8 @@
 // (ou ultérieure), SANS AUCUNE GARANTIE : voir le fichier LICENSE.
 
 #include "Bus.hpp"
+
+#include "StateIO.hpp"
 #include "Cartridge.hpp"
 #include "Vdp.hpp"
 #include "Psg.hpp"
@@ -100,4 +102,13 @@ void Bus::ioWrite(u8 port, u8 v) {
         else if (port == 0xFD) io->writeSdscData(v);
         return;
     }
+}
+
+// -----------------------------------------------------------------------------
+//  Save-state — work RAM + contrôle mémoire (le modèle est un réglage
+//  matériel, enregistré dans l'en-tête par Machine).
+// -----------------------------------------------------------------------------
+void Bus::serialize(StateIO& s) {
+    s.bytes(ram, sizeof(ram));
+    s.u8v(memControl);
 }

@@ -16,6 +16,8 @@
 #include "Types.hpp"
 #include <string>
 
+class StateIO;
+
 class Io {
 public:
     // Boutons manette : bits à 1 = APPUYÉ dans cette API publique
@@ -28,6 +30,11 @@ public:
     };
 
     void reset();
+
+    // Save-state : contrôle E/S seulement (les manettes sont des entrées
+    // vivantes, repoussées par le frontend à chaque trame ; le journal SDSC
+    // est un artefact de debug, pas de l'état console).
+    void serialize(StateIO& s);
 
     u8   readPort(u8 port);        // 0xDC ou 0xDD
     u8   readGgPort(u8 port);      // Game Gear : ports 0x00-0x06 en lecture

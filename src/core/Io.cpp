@@ -14,6 +14,8 @@
 // =============================================================================
 #include "Io.hpp"
 
+#include "StateIO.hpp"
+
 #include <cstdio>
 
 void Io::reset() {
@@ -108,4 +110,12 @@ void Io::writeSdscData(u8 v) {
 void Io::setPad(int padIndex, u8 buttons) {
     if (padIndex == 0 || padIndex == 1)
         pad[padIndex] = buttons;
+}
+
+// -----------------------------------------------------------------------------
+//  Save-state — contrôle E/S seulement (manettes = entrées vivantes,
+//  journal SDSC = artefact de debug).
+// -----------------------------------------------------------------------------
+void Io::serialize(StateIO& s) {
+    s.u8v(ioControl);
 }

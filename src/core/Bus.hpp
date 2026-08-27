@@ -28,11 +28,15 @@ class Cartridge;
 class Vdp;
 class Psg;
 class Io;
+class StateIO;
 
 class Bus {
 public:
     void attach(Cartridge* cart, Cartridge* bios, Vdp* vdp, Psg* psg, Io* io);
     void reset();
+
+    // Save-state : work RAM + contrôle mémoire.
+    void serialize(StateIO& s);
 
     // Modèle de console : réglage matériel (Machine::setModel), survit au
     // reset. Conditionne le décodage des ports 0x00-0x06.

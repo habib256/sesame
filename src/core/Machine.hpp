@@ -21,6 +21,8 @@
 #include <cstdio>
 #include <string>
 
+class StateIO;
+
 class Machine {
 public:
     static constexpr int kCpuClockNtsc  = 3579545;  // Hz
@@ -50,6 +52,16 @@ public:
     // Exécute exactement une trame vidéo (jusqu'au frameDone() du VDP).
     void runFrame();
 
+    // Save-states : fichier binaire versionné — en-tête « SESAMEST »,
+    // version, modèle et région (le chargement les vérifie et refuse un
+    // état pris sur une autre machine). À prendre en FRONTIÈRE de trame :
+    // le framebuffer du VDP n'est pas sérialisé, la trame suivante le
+    // reconstruit. Retourne false (avec message sur stderr) en cas d'échec ;
+    // un chargement échoué peut laisser la machine dans un état mixte —
+    // les frontends font un reset() dans ce cas.
+    bool saveState(const std::string& path);
+    bool loadState(const std::string& path);
+
     // Bouton Pause de la console = NMI. La Game Gear n'a PAS de bouton
     // Pause : son Start est un simple bit lu sur le port 0x00
     // (Io::Button::Start), jamais un NMI.
@@ -77,4 +89,5 @@ private:
     Model  model_  = Model::Sms;
     int lineCycles = 0;
     void traceStep();
+    void serializeAll(StateIO& s);  // corps commun save/load (symétrique)
 };
