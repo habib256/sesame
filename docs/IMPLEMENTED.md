@@ -24,7 +24,13 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   comparaison Y en 8 bits (un sprite à Y >= 0xF1 déborde en haut de l'écran)
 - Interruptions VBlank et ligne (reg 10), /INT en niveau
 - VCounter avec saut NTSC et PAL ; HCounter approximé (latch v1 simplifié)
-- Modes TMS9918 hérités : NON (écran noir) — voir TODO
+- Modes TMS9918 hérités (M4=0) : Graphic I/II (tables motifs/couleurs avec
+  masques de repli), texte 40 colonnes (encre/papier par reg7), multicolor
+  (blocs 4×4) ; sprites TMS (SAT 4 octets, 4/ligne, drapeau 5S + numéro du
+  5e, coïncidence sur les bits de motif, early clock, 16×16, MAG).
+  Couleurs : moitié sprite de la CRAM (comportement 315-5124) avec REPLI
+  sur la palette TMS canonique tant qu'aucune écriture CRAM n'a eu lieu —
+  choix documenté pour les jeux SG-1000 (extension `.sg` acceptée)
 
 ## PSG SN76489 (`src/core/Psg.cpp`)
 - 3 canaux carrés + bruit (LFSR Sega 16 bits, blanc/périodique)

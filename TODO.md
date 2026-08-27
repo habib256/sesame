@@ -19,7 +19,12 @@ et contraintes de licence détaillées là-bas).
 - [x] PAL (313 lignes, ~49,70 Hz) — cadence, horloge CPU/PSG 3 546 893 Hz,
       séquence VCounter (`--pal` dans les deux frontends, 2026-08)
 - [ ] HCounter réel + latch sur front TH (light gun)
-- [ ] Modes hérités TMS9918 (0-3) pour les jeux SG-1000/F-16
+- [x] Modes hérités TMS9918 pour les jeux SG-1000/F-16 — Graphic I/II,
+      texte (40 col.), multicolor, sprites TMS (4/ligne, drapeau 5S +
+      numéro, coïncidence, early clock, 16×16, MAG) ; couleurs CRAM
+      sprite (comportement 315-5124) avec repli palette TMS fixe tant que
+      la CRAM n'a pas été écrite (jeux SG-1000) ; `.sg` accepté partout ;
+      ROM de test `tmstest.sg` + étalon (27 checks), état v4 (2026-08)
 - [ ] Timing fin intra-ligne (mid-line scroll/CRAM effects)
 - [ ] [R] Option « no sprite limit » (débrayer la limite 8/ligne, option
       pédagogique — montrer pourquoi ça clignotait ; précédent : jgenesis,

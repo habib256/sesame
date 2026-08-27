@@ -26,7 +26,7 @@ namespace {
 void printUsage(FILE* out)
 {
     std::fprintf(out,
-        "usage: sesame-headless <rom.sms|rom.gg> [options]\n"
+        "usage: sesame-headless <rom.sms|rom.gg|rom.sg> [options]\n"
         "\n"
         "options:\n"
         "  --bios FILE           load FILE into the BIOS slot (boots before the\n"

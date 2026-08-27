@@ -92,6 +92,8 @@ private:
     Region region = Region::Ntsc;
     Model  model  = Model::Sms;
     u8 cramLatch = 0;   // GG : octet pair latché, commité par l'octet impair
+    bool cramTouched = false;  // une écriture CRAM a eu lieu depuis le reset
+                               // (choix de palette des modes hérités)
     int curLine = 0;
 
     // Décodage adresse/contrôle
@@ -109,5 +111,8 @@ private:
     u8  hLatch = 0;
 
     u32  colorAt(int index) const;  // entrée CRAM 0-31 -> RGBA selon modèle
+    u32  tmsColor(int c) const;     // couleur 1-15 des modes hérités
     void renderLine(int y);
+    void renderLineTms(int y);      // modes hérités TMS9918 (M4 = 0)
+    void renderTmsSprites(int y, u32* dst);
 };

@@ -45,6 +45,28 @@ inline u32 gearCramToRgba(u16 c) {
 // Noir opaque (utilisé au reset et pour les modes non gérés).
 constexpr u32 kBlack = 0xFF000000u;
 
+// Palette TMS9918 canonique (RGB publiés par la communauté), en RGBA
+// little-endian (0xAABBGGRR). L'entrée 0 (« transparent ») est rendue en
+// noir quand elle sert de couleur de fond.
+constexpr u32 kTmsPalette[16] = {
+    0xFF000000,  //  0 transparent
+    0xFF000000,  //  1 noir
+    0xFF42C821,  //  2 vert moyen        (33,200,66)
+    0xFF78DC5E,  //  3 vert clair        (94,220,120)
+    0xFFED5554,  //  4 bleu foncé        (84,85,237)
+    0xFFFC767D,  //  5 bleu clair        (125,118,252)
+    0xFF4D52D4,  //  6 rouge foncé       (212,82,77)
+    0xFFF5EB42,  //  7 cyan              (66,235,245)
+    0xFF5455FC,  //  8 rouge moyen       (252,85,84)
+    0xFF7879FF,  //  9 rouge clair       (255,121,120)
+    0xFF54C1D4,  // 10 jaune foncé       (212,193,84)
+    0xFF80CEE6,  // 11 jaune clair       (230,206,128)
+    0xFF3BB021,  // 12 vert foncé        (33,176,59)
+    0xFFBA5BC9,  // 13 magenta           (201,91,186)
+    0xFFCCCCCC,  // 14 gris              (204,204,204)
+    0xFFFFFFFF,  // 15 blanc
+};
+
 } // namespace
 
 // Entrée de palette (0-31) vers pixel RGBA, selon le modèle émulé.
@@ -68,6 +90,7 @@ void Vdp::reset() {
 
     curLine = 0;
     cramLatch = 0;
+    cramTouched = false;
     addr = 0;
     code = 0;
     readBuffer = 0;
@@ -126,6 +149,7 @@ u8 Vdp::readData() {
 void Vdp::writeData(u8 v) {
     ctrlLatch = false;
     if (code == 3) {
+        cramTouched = true;   // les modes hérités basculent sur la CRAM
         if (model == Model::GameGear) {
             // Game Gear : CRAM de 64 octets, écrite PAR MOT. L'octet PAIR
             // est latché ; l'octet IMPAIR commite les deux d'un coup
@@ -259,10 +283,9 @@ void Vdp::runLine() {
 void Vdp::renderLine(int y) {
     u32* dst = fb + y * kWidth;
 
-    // Mode 4 requis (bit M4 = reg0 bit 2). Modes hérités TMS9918 (0-3) :
-    // TODO — pour l'instant on remplit la ligne en noir sans planter.
+    // Bit M4 (reg0 bit 2) à zéro : modes hérités TMS9918 (SG-1000, F-16).
     if ((regs[0] & 0x04) == 0) {
-        for (int x = 0; x < kWidth; ++x) dst[x] = kBlack;
+        renderLineTms(y);
         return;
     }
 
@@ -407,6 +430,166 @@ void Vdp::renderLine(int y) {
 }
 
 // -----------------------------------------------------------------------------
+//  Modes hérités TMS9918 (M4 = 0) — utilisés par les jeux SG-1000 et
+//  quelques titres SMS (F-16 Fighting Falcon, mode texte).
+//
+//  Couleurs : le 315-5124 pioche dans la moitié SPRITE de la CRAM
+//  (entrées 16-31) — les jeux SMS qui utilisent ces modes y chargent une
+//  palette. Les jeux SG-1000, eux, ignorent la CRAM (leur TMS9918 a une
+//  palette FIXE) : tant qu'aucune écriture CRAM n'a eu lieu depuis le
+//  reset, on sert la palette TMS canonique — choix pragmatique documenté
+//  pour que les jeux SG-1000 s'affichent avec leurs couleurs d'origine.
+// -----------------------------------------------------------------------------
+u32 Vdp::tmsColor(int c) const {
+    if (cramTouched)
+        return colorAt(16 + c);
+    return kTmsPalette[c];
+}
+
+void Vdp::renderLineTms(int y) {
+    u32* dst = fb + y * kWidth;
+
+    // Couleur de fond : nibble bas de reg7 (0 = « transparent » -> noir).
+    const u32 backdrop = tmsColor(regs[7] & 0x0F);
+
+    if ((regs[1] & 0x40) == 0) {   // affichage coupé
+        for (int x = 0; x < kWidth; ++x) dst[x] = backdrop;
+        return;
+    }
+
+    const bool textMode  = (regs[1] & 0x10) != 0;   // M1
+    const bool graphic2  = (regs[0] & 0x02) != 0;   // M2 (Graphic II)
+    const bool multicolor = (regs[1] & 0x08) != 0;  // M3
+
+    const int nameBase = (regs[2] & 0x0F) << 10;
+
+    if (textMode) {
+        // ---- Mode texte : 40 colonnes de 6 pixels, pas de sprites --------
+        // Couleurs fixes par reg7 : nibble haut = encre, bas = papier.
+        const u32 ink   = tmsColor((regs[7] >> 4) & 0x0F);
+        const int patBase = (regs[4] & 0x07) << 11;
+        for (int x = 0; x < kWidth; ++x) dst[x] = backdrop;  // bordures 8 px
+        for (int col = 0; col < 40; ++col) {
+            const int name = vram[nameBase + (y >> 3) * 40 + col];
+            const u8 bits = vram[patBase + name * 8 + (y & 7)];
+            u32* p = dst + 8 + col * 6;
+            for (int px = 0; px < 6; ++px)
+                if (bits & (0x80 >> px)) p[px] = ink;
+        }
+        return;
+    }
+
+    if (multicolor) {
+        // ---- Mode multicolor : blocs de 4×4 pixels -----------------------
+        const int patBase = (regs[4] & 0x07) << 11;
+        for (int col = 0; col < 32; ++col) {
+            const int name = vram[nameBase + (y >> 3) * 32 + col];
+            // Un octet = deux blocs 4×4 ; la rangée d'octets suit (y/4).
+            const u8 byte = vram[patBase + name * 8 + (((y >> 2) & 1) |
+                                                       (((y >> 3) & 3) << 1))];
+            const int left = (byte >> 4) & 0x0F, right = byte & 0x0F;
+            u32* p = dst + col * 8;
+            for (int px = 0; px < 4; ++px) {
+                p[px]     = left  ? tmsColor(left)  : backdrop;
+                p[px + 4] = right ? tmsColor(right) : backdrop;
+            }
+        }
+        renderTmsSprites(y, dst);
+        return;
+    }
+
+    // ---- Modes Graphic I / II ------------------------------------------
+    // Graphic II : trois tiers d'écran, tables motifs/couleurs de 6 Ko avec
+    // masques de repli (reg4 bits 0-1, reg3 bits 0-6) ; Graphic I : un seul
+    // jeu de 256 motifs, un octet de couleurs pour 8 tuiles.
+    for (int col = 0; col < 32; ++col) {
+        const int name = vram[nameBase + (y >> 3) * 32 + col];
+        u8 bits, colors;
+        if (graphic2) {
+            const int index = ((y >> 6) << 8) | name;    // tiers d'écran
+            const int ofs = (index << 3) | (y & 7);
+            const int patBase = (regs[4] & 0x04) ? 0x2000 : 0x0000;
+            const int colBase = (regs[3] & 0x80) ? 0x2000 : 0x0000;
+            bits   = vram[patBase + (ofs & (((regs[4] & 0x03) << 11) | 0x7FF))];
+            colors = vram[colBase + (ofs & (((regs[3] & 0x7F) << 3) | 0x007))];
+        } else {
+            const int patBase = (regs[4] & 0x07) << 11;
+            const int colBase = regs[3] << 6;
+            bits   = vram[patBase + name * 8 + (y & 7)];
+            colors = vram[colBase + (name >> 3)];
+        }
+        const int fg = (colors >> 4) & 0x0F, bg = colors & 0x0F;
+        const u32 fgc = fg ? tmsColor(fg) : backdrop;
+        const u32 bgc = bg ? tmsColor(bg) : backdrop;
+        u32* p = dst + col * 8;
+        for (int px = 0; px < 8; ++px)
+            p[px] = (bits & (0x80 >> px)) ? fgc : bgc;
+    }
+    renderTmsSprites(y, dst);
+}
+
+// -----------------------------------------------------------------------------
+//  Sprites TMS9918 : SAT de 32 entrées de 4 octets (Y, X, motif, EC+couleur),
+//  limite de 4 par ligne (le 5e lève le drapeau 5S et son numéro dans le
+//  statut), coïncidence sur les BITS de motif (même transparents).
+// -----------------------------------------------------------------------------
+void Vdp::renderTmsSprites(int y, u32* dst) {
+    const int satBase = (regs[5] & 0x7F) << 7;
+    const int patBase = (regs[6] & 0x07) << 11;
+    const bool size16 = (regs[1] & 0x02) != 0;
+    const int  mag    = (regs[1] & 0x01) ? 1 : 0;
+    const int  span   = (size16 ? 16 : 8) << mag;   // hauteur/largeur écran
+
+    bool hit[kWidth] = {};   // bits de motif déjà posés (coïncidence)
+    int shown = 0;
+
+    for (int i = 0; i < 32; ++i) {
+        const int ya = vram[satBase + i * 4];
+        if (ya == 0xD0) break;               // fin de liste
+
+        // Y : la première ligne du sprite est ya+1 ; les valeurs hautes
+        // (> 0xE0) débordent du haut de l'écran (position négative).
+        const int sy = (ya > 0xE0) ? (ya - 255) : (ya + 1);
+        const int row = (y - sy) >> mag;
+        if (row < 0 || row >= (size16 ? 16 : 8) || (y - sy) < 0) continue;
+
+        if (++shown > 4) {
+            // 5e sprite de la ligne : drapeau 5S (bit 6) + son numéro.
+            status = static_cast<u8>((status & 0xE0) | 0x40 | (i & 0x1F));
+            break;
+        }
+
+        const u8 flags = vram[satBase + i * 4 + 3];
+        int sx = vram[satBase + i * 4 + 1];
+        if (flags & 0x80) sx -= 32;          // early clock : décalé à gauche
+        int pat = vram[satBase + i * 4 + 2];
+        if (size16) pat &= 0xFC;             // 16×16 : 4 motifs consécutifs
+
+        const int color = flags & 0x0F;
+        const u32 rgba = tmsColor(color);
+
+        // Motif de la rangée : 8 bits (8×8) ou 16 bits (16×16, deux
+        // colonnes de 8 rangées côte à côte).
+        u16 rowBits = static_cast<u16>(vram[patBase + pat * 8 + row] << 8);
+        if (size16)
+            rowBits |= vram[patBase + pat * 8 + row + 16];
+
+        for (int px = 0; px < span; ++px) {
+            if (!(rowBits & (0x8000 >> (px >> mag)))) continue;
+            const int x = sx + px;
+            if (x < 0 || x >= kWidth) continue;
+            if (hit[x]) {
+                status |= 0x20;              // coïncidence (collision)
+                continue;
+            }
+            hit[x] = true;
+            if (color != 0)                  // couleur 0 : invisible mais
+                dst[x] = rgba;               // participe à la coïncidence
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
 //  Save-state — VRAM/CRAM/registres et verrous internes. Le framebuffer est
 //  reconstruit ligne à ligne par la trame suivante (états pris en frontière
 //  de trame par les frontends).
@@ -416,6 +599,7 @@ void Vdp::serialize(StateIO& s) {
     s.bytes(cram, sizeof(cram));
     s.bytes(regs, sizeof(regs));
     s.u8v(cramLatch);
+    s.boolv(cramTouched);
     s.intv(curLine);
     s.u16v(addr);
     s.u8v(code);

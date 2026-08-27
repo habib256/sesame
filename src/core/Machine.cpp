@@ -107,7 +107,7 @@ void Machine::runFrame() {
 // -----------------------------------------------------------------------------
 namespace {
 constexpr char kStateMagic[8] = {'S','E','S','A','M','E','S','T'};
-constexpr u32  kStateVersion  = 3;  // v2 : +YM2413 ; v3 : +mappers exotiques
+constexpr u32  kStateVersion  = 4;  // v2 +YM2413 ; v3 +mappers ; v4 +TMS
 }  // namespace
 
 void Machine::serializeAll(StateIO& s) {

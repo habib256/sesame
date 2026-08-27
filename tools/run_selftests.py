@@ -166,6 +166,28 @@ def main():
             check(f'VDP scene "{name}" matches reference',
                   cmp_run.returncode == 0, cmp_run.stdout.strip())
 
+    # --- 5 bis. ROM de test des modes hérités TMS9918 (SG-1000) --------------
+    gen = subprocess.run(
+        [sys.executable, str(ROOT / 'tools' / 'make_tms_rom.py')],
+        capture_output=True, text=True)
+    if check('generate TMS test ROM', gen.returncode == 0,
+             gen.stderr.strip() or gen.stdout.strip()):
+        tms_rom = ROOT / 'roms' / 'tmstest.sg'
+        shot = Path('/tmp/sesame_vdp_tms.ppm')
+        shot.unlink(missing_ok=True)
+        run = subprocess.run(
+            [str(HEADLESS), str(tms_rom), '--frames', '20', '--sdsc',
+             '--screenshot', str(shot)],
+            capture_output=True, text=True, timeout=120, cwd=ROOT)
+        for verdict in ('TMS5S OK', 'TMSTC OK'):
+            check(f'TMS rom reports "{verdict}"', verdict in run.stdout)
+        cmp_run = subprocess.run(
+            [sys.executable, str(ROOT / 'tools' / 'compare_ppm.py'),
+             str(VDP_REFS / 'vdp_tms.ppm'), str(shot)],
+            capture_output=True, text=True)
+        check('TMS Graphic II scene matches reference',
+              cmp_run.returncode == 0, cmp_run.stdout.strip())
+
     # --- 6. ROM de test des mappers exotiques (Codemasters, coréen) ----------
     gen = subprocess.run(
         [sys.executable, str(ROOT / 'tools' / 'make_mapper_roms.py')],

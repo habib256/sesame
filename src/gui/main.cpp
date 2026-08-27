@@ -142,7 +142,7 @@ int main(int argc, char** argv)
 {
     if (argc < 2) {
         std::fprintf(stderr,
-                     "usage: sesame <rom.sms|rom.gg> [--bios FILE] [--pal] "
+                     "usage: sesame <rom.sms|rom.gg|rom.sg> [--bios FILE] [--pal] "
                      "[--crt] [--kiosk] [--kiosk-monitor N]\n");
         std::fprintf(stderr, "error: no ROM file given\n");
         return 1;

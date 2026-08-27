@@ -11,6 +11,8 @@ the GUI; the `Bus` class *is* the memory map.
 - Full Z80 core (documented + undocumented opcodes, standard cycle counts)
 - VDP 315-5124, mode 4: background scrolling, sprites, line & VBlank
   interrupts, 224/240-line SMS2 modes
+- Legacy TMS9918 modes (Graphic I/II, Text, Multicolor) with TMS sprites —
+  SG-1000 games (`.sg`) and F-16 Fighting Falcon
 - NTSC and PAL consoles (`--pal`: 313 lines, ~49.70 Hz, PAL CPU clock)
 - SN76489 PSG (3 square channels + noise), 44.1 kHz band-limited stereo
   output

@@ -47,7 +47,7 @@ bool endsWithSms(const std::string& n)
     std::string ext = n.substr(dot);
     std::transform(ext.begin(), ext.end(), ext.begin(),
                    [](unsigned char c) { return std::tolower(c); });
-    return ext == ".sms" || ext == ".gg";
+    return ext == ".sms" || ext == ".gg" || ext == ".sg";
 }
 
 bool nameContainsBios(const std::string& n)
@@ -260,7 +260,7 @@ void KioskMenu::render(int fbW, int fbH, bool fullscreen)
     drawText(colGames, top, s, "GAMES",
              gamesActive ? 1.0f : 0.5f, gamesActive ? 0.9f : 0.5f, 0.3f, 1.0f);
     if (games.empty()) {
-        drawText(colGames, top + lh, s, "(no .sms/.gg found)",
+        drawText(colGames, top + lh, s, "(no .sms/.gg/.sg found)",
                  0.6f, 0.6f, 0.6f, 1.0f);
     }
     const int last = std::min(static_cast<int>(games.size()),
