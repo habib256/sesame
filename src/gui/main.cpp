@@ -197,8 +197,19 @@ int main(int argc, char** argv)
     bool        forceGg      = cfg.gameGear;  // --gg : matériel GG forcé
     bool        noBios       = (cfg.bios == "none");
     bool        cliBiosSeen  = false;   // --bios explicite (persisté)
-    if (!cfg.bios.empty() && cfg.bios != "none")
-        biosPath = cfg.bios.c_str();
+    if (!cfg.bios.empty() && cfg.bios != "none") {
+        // Un chemin de config invalide ne doit pas empêcher de jouer :
+        // avertir et laisser l'auto-détection prendre le relais.
+        if (FILE* f = std::fopen(cfg.bios.c_str(), "rb")) {
+            std::fclose(f);
+            biosPath = cfg.bios.c_str();
+        } else {
+            std::fprintf(stderr,
+                         "warning: config bios '%s' not found, falling back "
+                         "to auto-detection\n", cfg.bios.c_str());
+            cfg.bios.clear();   // resauvegardé vide à la sortie
+        }
+    }
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--menu") == 0) {
             openMenu = true;

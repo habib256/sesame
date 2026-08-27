@@ -87,7 +87,12 @@ bool Config::load(const std::string& p) {
 
         if      (key == "pal")             pal = parseBool(val, pal);
         else if (key == "game_gear")       gameGear = parseBool(val, gameGear);
-        else if (key == "bios")            bios = val;
+        else if (key == "bios") {
+            // Tolérance : « empty »/« auto » = champ laissé vide (l'ancien
+            // commentaire du fichier invitait à écrire le mot littéral).
+            const std::string b = lower(val);
+            bios = (b == "empty" || b == "auto") ? "" : val;
+        }
         else if (key == "crt")             crt = parseBool(val, crt);
         else if (key == "fullscreen")      fullscreen = parseBool(val, fullscreen);
         else if (key == "kiosk")           kiosk = parseBool(val, kiosk);
@@ -140,7 +145,8 @@ bool Config::save() const {
          "# --- Machine ---\n"
       << "pal = " << (pal ? "true" : "false") << "\n"
       << "game_gear = " << (gameGear ? "true" : "false") << "\n"
-      << "# bios: empty = auto-detect (bios/ folder), 'none' = skip, or a path\n"
+      << "# bios: leave BLANK to auto-detect (bios/ folder), 'none' to skip,\n"
+      << "#       or the path of a BIOS image\n"
       << "bios = " << bios << "\n"
          "\n"
          "# --- Display ---\n"
