@@ -38,6 +38,15 @@ the GUI; the `Bus` class *is* the memory map.
   mask, phosphor persistence; `--no-crt` or the C key for the raw image)
   and kiosk mode (exclusive fullscreen, hidden cursor)
 
+## Configuration
+
+The GUI reads `sesame.cfg` (INI-style; `--config FILE`, else `./sesame.cfg`,
+else next to the executable) and **rewrites it on exit** with the effective
+settings — CRT filter (on/off and all its parameters), fullscreen, PAL,
+Game Gear hardware, kiosk mode and monitor, menu ROM folder,
+`no_sprite_limit`. Command-line flags override the file for one launch and
+are then remembered. The file is created on first exit; edit it freely.
+
 ## Build
 
 ```sh

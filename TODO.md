@@ -26,9 +26,9 @@ et contraintes de licence détaillées là-bas).
       la CRAM n'a pas été écrite (jeux SG-1000) ; `.sg` accepté partout ;
       ROM de test `tmstest.sg` + étalon (27 checks), état v4 (2026-08)
 - [ ] Timing fin intra-ligne (mid-line scroll/CRAM effects)
-- [ ] [R] Option « no sprite limit » (débrayer la limite 8/ligne, option
-      pédagogique — montrer pourquoi ça clignotait ; précédent : jgenesis,
-      Snepulator, Mesen 2)
+- [x] [R] Option « no sprite limit » (mode 4 : 8/ligne ; TMS : 4/ligne ;
+      les drapeaux overflow/5S restent levés) — `no_sprite_limit` dans
+      sesame.cfg, `--no-sprite-limit` au headless (2026-08)
 
 ## Son
 - [x] Sortie audio temps réel dans le GUI (CoreAudio/AudioQueue, 2026-08)
@@ -89,7 +89,12 @@ et contraintes de licence détaillées là-bas).
       liste de jeux, restart, desktop, quit — 2026-08)
 - [ ] Menu kiosk : dossiers ROM additionnels + affectation des manettes
       (parité NeoST)
-- [ ] Presets CRT configurables (--crt-preset / fichier de config)
+- [x] Fichier de configuration `sesame.cfg` : chargé au lancement
+      (--config FILE, ./sesame.cfg ou à côté de l'exécutable), CLI
+      prioritaire, état effectif RÉÉCRIT à la sortie propre (les réglages
+      survivent) ; machine (pal, game_gear, bios), affichage (crt,
+      fullscreen, kiosk, rom_dir, no_sprite_limit) et les 13 paramètres du
+      filtre CRT (2026-08)
 - [x] Build WebAssembly — `src/wasm/main_wasm.cpp` (API C exportée) +
       `web/index.html` (canvas 2D, WebAudio, clavier) + `tools/build_wasm.sh`
       (emcc) ; recadrage GG et .sms/.gg/.sg gérés ; validé sous Node

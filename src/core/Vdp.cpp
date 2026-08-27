@@ -383,7 +383,8 @@ void Vdp::renderLine(int y) {
 
         if (++shown > 8) {                     // limite matérielle : 8 sprites/ligne
             status |= 0x40;                    // bit 6 : sprite overflow
-            break;                             // les sprites en trop ne sont pas affichés
+            if (spriteLimit)
+                break;                         // les sprites en trop ne sont pas affichés
         }
 
         const int sx0 = vram[satBase + 128 + i * 2] + xShift;
@@ -554,9 +555,12 @@ void Vdp::renderTmsSprites(int y, u32* dst) {
         if (row < 0 || row >= (size16 ? 16 : 8) || (y - sy) < 0) continue;
 
         if (++shown > 4) {
-            // 5e sprite de la ligne : drapeau 5S (bit 6) + son numéro.
-            status = static_cast<u8>((status & 0xE0) | 0x40 | (i & 0x1F));
-            break;
+            // 5e sprite de la ligne : drapeau 5S (bit 6) + son numéro
+            // (posé une seule fois, pour le premier sprite en trop).
+            if (shown == 5)
+                status = static_cast<u8>((status & 0xE0) | 0x40 | (i & 0x1F));
+            if (spriteLimit)
+                break;
         }
 
         const u8 flags = vram[satBase + i * 4 + 3];

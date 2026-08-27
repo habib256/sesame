@@ -25,6 +25,7 @@
 #include "core/Machine.hpp"
 
 #include "AudioOut.hpp"
+#include "Config.hpp"
 #include "CrtEffectStack.hpp"
 #include "KioskMenu.hpp"
 
@@ -173,18 +174,30 @@ int main(int argc, char** argv)
     // Sans ROM, le frontend démarre quand même : BIOS auto-détecté dans le
     // dossier courant et menu borne ouvert pour choisir un jeu (usage
     // typique : `sesame --kiosk` depuis le dossier des ROM).
+    // Fichier de configuration : pré-scan de --config, puis chargement —
+    // les valeurs du fichier deviennent les défauts, la ligne de commande
+    // PRIME, et l'état effectif sera resauvegardé à la sortie propre.
+    const char* configPath = nullptr;
+    for (int i = 1; i + 1 < argc; ++i)
+        if (std::strcmp(argv[i], "--config") == 0)
+            configPath = argv[i + 1];
+    Config cfg = Config::locate(configPath, argv[0]);
+
     const char* romPath  = nullptr;
     const char* biosPath = nullptr;
-    bool        pal      = false;
-    bool        crtOn    = true;   // filtre CRT actif par défaut (--no-crt
-                                   // ou touche C pour l'image brute)
-    bool        kiosk    = false;
-    int         kioskMonitor = 0;
+    bool        pal      = cfg.pal;
+    bool        crtOn    = cfg.crt;      // --no-crt / touche C : image brute
+    bool        kiosk    = cfg.kiosk;
+    int         kioskMonitor = cfg.kioskMonitor;
     long        shotAtFrame  = -1;       // --shot-at : validation du rendu GL
+    long        exitAtFrame  = -1;       // --exit-at : sortie propre à la trame N
     const char* shotPath     = nullptr;
     bool        openMenu     = false;    // --menu : menu borne ouvert au départ
-    bool        forceGg      = false;    // --gg : matériel Game Gear forcé
-    bool        noBios       = false;    // --no-bios : pas d'auto-détection
+    bool        forceGg      = cfg.gameGear;  // --gg : matériel GG forcé
+    bool        noBios       = (cfg.bios == "none");
+    bool        cliBiosSeen  = false;   // --bios explicite (persisté)
+    if (!cfg.bios.empty() && cfg.bios != "none")
+        biosPath = cfg.bios.c_str();
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--menu") == 0) {
             openMenu = true;
@@ -197,6 +210,14 @@ int main(int argc, char** argv)
             }
             shotAtFrame = std::atol(argv[++i]);
             shotPath    = argv[++i];
+        } else if (std::strcmp(argv[i], "--exit-at") == 0) {
+            // Outil de validation : fermeture PROPRE (config sauvegardée)
+            // après N trames affichées.
+            if (i + 1 >= argc) {
+                std::fprintf(stderr, "error: --exit-at requires N\n");
+                return 1;
+            }
+            exitAtFrame = std::atol(argv[++i]);
         } else if (std::strcmp(argv[i], "--pal") == 0) {
             pal = true;
         } else if (std::strcmp(argv[i], "--gg") == 0) {
@@ -205,6 +226,9 @@ int main(int argc, char** argv)
             forceGg = true;
         } else if (std::strcmp(argv[i], "--no-bios") == 0) {
             noBios = true;
+            cliBiosSeen = true;   // « none » sera persisté
+        } else if (std::strcmp(argv[i], "--config") == 0) {
+            ++i;   // déjà traité par le pré-scan
         } else if (std::strcmp(argv[i], "--crt") == 0) {
             crtOn = true;   // déjà le défaut ; accepté pour compatibilité
         } else if (std::strcmp(argv[i], "--no-crt") == 0) {
@@ -219,6 +243,7 @@ int main(int argc, char** argv)
             }
             kioskMonitor = std::atoi(argv[++i]);
         } else if (std::strcmp(argv[i], "--bios") == 0) {
+            cliBiosSeen = true;
             if (i + 1 >= argc) {
                 std::fprintf(stderr, "error: --bios requires a file name\n");
                 return 1;
@@ -293,6 +318,7 @@ int main(int argc, char** argv)
     }
     if (forceGg && machine.model() == Model::Sms)
         machine.setModel(Model::GameGearSms);
+    machine.vdp.setSpriteLimit(!cfg.noSpriteLimit);
     const char* titlePath = romPath ? romPath : biosPath;  // peut rester nul
 
     // Sans ROM : le menu borne s'ouvre au lancement pour choisir un jeu.
@@ -404,13 +430,17 @@ int main(int argc, char** argv)
     // Menu borne : liste des jeux du dossier de la ROM chargée + actions.
     // Ouverture : F9 partout ; Start manette et Échap en mode borne.
     KioskMenu menu;
-    {
+    if (!cfg.romDir.empty()) {
+        menu.setRomDir(cfg.romDir);
+    } else {
         std::string dir = titlePath ? titlePath : "";
         const std::string::size_type slash = dir.find_last_of("/\\");
         menu.setRomDir(slash == std::string::npos ? "."
                                                   : dir.substr(0, slash));
     }
     bool menuToggleWasDown = false;
+    if (cfg.fullscreen && !fullscreen)
+        toggleFullscreen();
     if (openMenu)
         menu.open();
 
@@ -420,6 +450,7 @@ int main(int argc, char** argv)
     // la touche C rendent l'image brute. En cas d'échec (shader/FBO),
     // process() renvoie 0 et on retombe sur le rendu brut.
     CrtEffectStack crt;
+    crt.setParams(cfg.crtParams);
     bool crtWasDown = false;
     if (crtOn && !crt.initialize())
         std::fprintf(stderr, "crt: unavailable (%s), raw output\n",
@@ -691,6 +722,9 @@ int main(int argc, char** argv)
 
         glfwSwapBuffers(win);
 
+        if (exitAtFrame >= 0 && displayedFrames >= exitAtFrame)
+            glfwSetWindowShouldClose(win, GLFW_TRUE);
+
         // Sauvegarde périodique de la RAM cartouche (~toutes les 5 s ; no-op
         // si rien n'a changé) : une fermeture brutale ne perd presque rien.
         if (machine.frameCount % 300 == 0)
@@ -698,6 +732,23 @@ int main(int argc, char** argv)
     }
 
     machine.cart.persistSaveRam();
+
+    // « Garde la config » : l'état effectif est réécrit dans sesame.cfg —
+    // les réglages (CRT, plein écran, PAL, borne…) survivent au prochain
+    // lancement. Un --bios/--no-bios explicite est persisté ; l'auto-
+    // détection, elle, reste « auto » (champ bios laissé tel quel).
+    cfg.pal = pal;
+    cfg.gameGear = forceGg;
+    cfg.crt = crtOn;
+    cfg.fullscreen = fullscreen && !kiosk;   // la borne est déjà plein écran
+    cfg.kiosk = kiosk;
+    cfg.kioskMonitor = kioskMonitor;
+    if (cliBiosSeen)
+        cfg.bios = noBios ? "none" : (biosPath ? biosPath : "");
+    if (cfg.save())
+        std::fprintf(stderr, "config: saved %s\n", cfg.path.c_str());
+    else
+        std::fprintf(stderr, "config: cannot write %s\n", cfg.path.c_str());
 
     glDeleteTextures(1, &tex);
     glfwDestroyWindow(win);

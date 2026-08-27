@@ -54,6 +54,12 @@ public:
     // Modèle de console : réglage matériel (Machine::setModel), survit au
     // reset. En Game Gear, la CRAM passe en entrées 12 bits (2 octets).
     void setModel(Model m) { model = m; }
+
+    // Option PÉDAGOGIQUE (entorse au matériel) : désactive la limite de
+    // sprites par ligne (8 en mode 4, 4 en modes TMS) pour supprimer le
+    // clignotement d'époque. Les drapeaux de statut (overflow/5S) restent
+    // levés comme sur la vraie puce. Réglage du frontend, survit au reset.
+    void setSpriteLimit(bool enabled) { spriteLimit = enabled; }
     int  linesPerFrame() const {
         return (region == Region::Pal) ? kLinesPal : kLinesNtsc;
     }
@@ -94,6 +100,7 @@ private:
     u8 cramLatch = 0;   // GG : octet pair latché, commité par l'octet impair
     bool cramTouched = false;  // une écriture CRAM a eu lieu depuis le reset
                                // (choix de palette des modes hérités)
+    bool spriteLimit = true;   // limite matérielle de sprites par ligne
     int curLine = 0;
 
     // Décodage adresse/contrôle

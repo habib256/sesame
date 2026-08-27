@@ -36,6 +36,7 @@ void printUsage(FILE* out)
         "                        CPU 3546893 Hz) instead of NTSC\n"
         "  --gg                  force Game Gear hardware: an SMS cartridge\n"
         "                        runs in compatibility mode (160x144 window)\n"
+        "  --no-sprite-limit     remove the sprites-per-scanline hardware limit\n"
         "  --frames N            number of frames to run (default 60)\n"
         "  --trace FILE          write a per-instruction CPU trace to FILE\n"
         "  --screenshot FILE.ppm capture the final framebuffer as a PPM image\n"
@@ -218,6 +219,7 @@ int main(int argc, char** argv)
     const char* wavPath       = nullptr;
     long        pauseAt       = -1;       // -1 = jamais
     bool        forceGg       = false;    // --gg : matériel Game Gear forcé
+    bool        noSpriteLimit = false;    // --no-sprite-limit (pédagogique)
     const char* stateLoadPath = nullptr;  // --state-load : avant la 1re trame
     long        stateSaveAt   = -1;       // --state-save : après la trame N
     const char* stateSavePath = nullptr;
@@ -275,6 +277,8 @@ int main(int argc, char** argv)
             stateSavePath = argv[++i];
         } else if (std::strcmp(a, "--gg") == 0) {
             forceGg = true;
+        } else if (std::strcmp(a, "--no-sprite-limit") == 0) {
+            noSpriteLimit = true;
         } else if (std::strcmp(a, "--sav") == 0) {
             sav = true;
         } else if (std::strcmp(a, "--sdsc") == 0) {
@@ -334,6 +338,7 @@ int main(int argc, char** argv)
     // mode compatibilité (palette SMS, fenêtre LCD 160×144).
     if (forceGg && machine.model() == Model::Sms)
         machine.setModel(Model::GameGearSms);
+    machine.vdp.setSpriteLimit(!noSpriteLimit);
     const bool gg = (machine.model() != Model::Sms);
     std::fprintf(stderr, "video: %dx%d @ %s%s\n",
                  gg ? Vdp::kGgWidth : Vdp::kWidth,

@@ -126,6 +126,17 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   continu et save-à-60 + reload dans un NOUVEAU processus ; idem pour
   l'audio WAV de reprise
 
+## Configuration (`src/gui/Config.cpp`, fichier `sesame.cfg`)
+- INI minimal (clef = valeur, # commentaires), clefs en anglais ; chargé au
+  lancement (--config FILE, sinon ./sesame.cfg, sinon à côté de
+  l'exécutable) ; la ligne de commande PRIME pour un lancement
+- L'état effectif est RÉÉCRIT à la sortie propre : CRT (on/off + les 13
+  paramètres du filtre), plein écran, PAL, matériel GG, borne + moniteur,
+  dossier de ROM du menu, no_sprite_limit, BIOS explicite (--bios/--no-bios
+  persistés, l'auto-détection restant « auto »)
+- Le headless n'utilise PAS ce fichier (déterminisme) ; --exit-at N au GUI
+  pour une sortie propre scriptable (tests)
+
 ## Frontends
 - `sesame-headless` : --bios, --pal, --sav, --frames, --trace, --screenshot,
   --shot-every, --sdsc, --wav, --pause-at

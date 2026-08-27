@@ -66,6 +66,7 @@ if(glfw3_FOUND)
     add_executable(sesame
         src/gui/main.cpp
         src/gui/AudioOut.cpp
+        src/gui/Config.cpp
         src/gui/CrtEffectStack.cpp
         src/gui/KioskMenu.cpp
         src/gui/OpenGLShader.cpp
