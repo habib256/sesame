@@ -27,9 +27,8 @@
 //    - cadences d'enveloppe : forme et ordre de grandeur du matériel
 //      (attaque exponentielle, decay linéaire en dB), pas le cycle exact ;
 //    - LFO vibrato ~6 Hz / trémolo ~3,7 Hz aux profondeurs nominales ;
-//    - INSTRUMENTS ROM : jeu de patches APPROXIMATIF écrit d'après les
-//      descriptions publiques des instruments — à remplacer par un dump
-//      vérifié (TODO) ; l'instrument utilisateur, lui, est exact ;
+//    - INSTRUMENTS ROM : jeu VÉRIFIÉ par la communauté (analyse du die,
+//      doc andete, valeurs publiées dans emu2413/MIT) ;
 //    - MODE RYTHME (reg 0x0E bit 5) : les canaux 6-8 deviennent cinq
 //      percussions — grosse caisse (2 opérateurs FM), caisse claire,
 //      charleston, tom et cymbale. Le vrai silicium mélange des bits de
@@ -95,37 +94,35 @@ constexpr int kKslBase[16] = {0, 24, 32, 37, 40, 43, 45, 47,
                               48, 50, 51, 52, 53, 54, 55, 56};
 
 // --- Instruments ROM ---------------------------------------------------------
-// APPROXIMATION (v1) : patches écrits d'après le caractère documenté des
-// instruments (application manual : violon, guitare, piano, flûte...).
+// Jeu de patches VÉRIFIÉ : valeurs du YM2413 issues de la rétro-ingénierie
+// communautaire (documentation andete d'après l'analyse du die, jeu publié
+// dans emu2413 de Mitsutaka Okazaki, licence MIT — merci à eux).
 // Format = registres 0x00-0x07 : [mod AM|VIB|EGT|KSR|MULT, car idem,
 // KSLm|TL, KSLc|DC|DM|FB, AR/DR mod, AR/DR car, SL/RR mod, SL/RR car].
-// TODO : remplacer par un jeu de valeurs vérifié contre le matériel.
 constexpr u8 kRomPatch[15][8] = {
-    {0x21, 0x21, 0x1D, 0x07, 0xF2, 0xF4, 0x33, 0x27},  // 1  violon
-    {0x13, 0x41, 0x16, 0x06, 0xD8, 0xF6, 0x23, 0x12},  // 2  guitare
-    {0x31, 0x21, 0x1A, 0x05, 0xF2, 0xF2, 0x51, 0x24},  // 3  piano
-    {0x21, 0x61, 0x1B, 0x07, 0xA2, 0x62, 0x14, 0x17},  // 4  flûte
-    {0x22, 0x21, 0x1E, 0x06, 0xF2, 0x64, 0x30, 0x27},  // 5  clarinette
-    {0x31, 0x22, 0x16, 0x05, 0x92, 0x62, 0x51, 0x17},  // 6  hautbois
-    {0x21, 0x61, 0x1D, 0x07, 0x82, 0x82, 0x11, 0x17},  // 7  trompette
-    {0x23, 0x21, 0x2D, 0x06, 0x62, 0x52, 0x21, 0x17},  // 8  orgue
-    {0x21, 0x21, 0x1B, 0x06, 0x62, 0x62, 0x21, 0x27},  // 9  cor
-    {0x21, 0x21, 0x0B, 0x04, 0xA2, 0x84, 0x58, 0x37},  // 10 synthé
-    {0x23, 0x01, 0x15, 0x00, 0xC2, 0xF4, 0x22, 0x28},  // 11 clavecin
-    {0x97, 0xC1, 0x24, 0x07, 0xFF, 0xF8, 0x22, 0x12},  // 12 vibraphone
-    {0x21, 0x01, 0x0C, 0x03, 0x94, 0xF4, 0x40, 0x13},  // 13 basse synthé
-    {0x01, 0x01, 0x55, 0x03, 0xE6, 0xF4, 0x50, 0x13},  // 14 basse acoustique
-    {0x21, 0x41, 0x89, 0x03, 0xF1, 0xF4, 0xF0, 0x13},  // 15 basse électrique
+    {0x71, 0x61, 0x1E, 0x17, 0xD0, 0x78, 0x00, 0x17},  // 1  violon
+    {0x13, 0x41, 0x1A, 0x0D, 0xD8, 0xF7, 0x23, 0x13},  // 2  guitare
+    {0x13, 0x01, 0x99, 0x00, 0xF2, 0xC4, 0x21, 0x23},  // 3  piano
+    {0x11, 0x61, 0x0E, 0x07, 0x8D, 0x64, 0x70, 0x27},  // 4  flûte
+    {0x32, 0x21, 0x1E, 0x06, 0xE1, 0x76, 0x01, 0x28},  // 5  clarinette
+    {0x31, 0x22, 0x16, 0x05, 0xE0, 0x71, 0x00, 0x18},  // 6  hautbois
+    {0x21, 0x61, 0x1D, 0x07, 0x82, 0x81, 0x11, 0x07},  // 7  trompette
+    {0x33, 0x21, 0x2D, 0x13, 0xB0, 0x70, 0x00, 0x07},  // 8  orgue
+    {0x61, 0x61, 0x1B, 0x06, 0x64, 0x65, 0x10, 0x17},  // 9  cor
+    {0x41, 0x61, 0x0B, 0x18, 0x85, 0xF0, 0x81, 0x07},  // 10 synthétiseur
+    {0x33, 0x01, 0x83, 0x11, 0xEA, 0xEF, 0x10, 0x04},  // 11 clavecin
+    {0x17, 0xC1, 0x24, 0x07, 0xF8, 0xF8, 0x22, 0x12},  // 12 vibraphone
+    {0x61, 0x50, 0x0C, 0x05, 0xD2, 0xF5, 0x40, 0x42},  // 13 basse synthé
+    {0x01, 0x01, 0x55, 0x03, 0xE9, 0x90, 0x03, 0x02},  // 14 basse acoustique
+    {0x41, 0x41, 0x89, 0x03, 0xF1, 0xE4, 0xC0, 0x13},  // 15 guitare élec.
 };
 
-// Patches du mode rythme (mêmes réserves que kRomPatch : approximations).
-// [0] grosse caisse (2 opérateurs), [1] charleston/caisse claire,
-// [2] tom/cymbale — seuls les taux d'enveloppe comptent pour les voix à
-// bruit, la grosse caisse utilise le patch complet.
+// Patches du mode rythme, mêmes sources (grosse caisse 2 opérateurs,
+// charleston/caisse claire, tom/cymbale).
 constexpr u8 kRhythmPatch[3][8] = {
-    {0x01, 0x01, 0x16, 0x07, 0xF8, 0xF8, 0x68, 0x68},  // grosse caisse
-    {0x01, 0x01, 0x00, 0x00, 0xF8, 0xE8, 0x68, 0x58},  // charleston / claire
-    {0x05, 0x01, 0x00, 0x00, 0xF8, 0xA8, 0x58, 0x55},  // tom / cymbale
+    {0x01, 0x01, 0x18, 0x0F, 0xDF, 0xF8, 0x6A, 0x6D},  // grosse caisse
+    {0x01, 0x01, 0x00, 0x00, 0xC8, 0xD8, 0xA7, 0x68},  // charleston / claire
+    {0x05, 0x01, 0x00, 0x00, 0xF8, 0xAA, 0x59, 0x55},  // tom / cymbale
 };
 
 }  // namespace
@@ -258,18 +255,30 @@ void Ym2413::advanceEnvelope(Op& o, const u8* patch, int opIdx, int c) {
     if (shift > 0 && (lfoCounter & ((1u << shift) - 1)) != 0)
         return;  // pas encore l'heure de ce pas d'enveloppe
 
+    // Sous-cadence : la fraction de taux (eff & 3) module le pas suivant le
+    // motif sur 8 temps de la famille OPL (moyennes 1 ; 1,25 ; 1,5 ; 1,75).
+    static const u8 kEgInc[4][8] = {
+        {1, 1, 1, 1, 1, 1, 1, 1},
+        {1, 1, 1, 2, 1, 1, 1, 2},
+        {1, 2, 1, 2, 1, 2, 1, 2},
+        {1, 2, 2, 2, 1, 2, 2, 2},
+    };
+    const int inc = kEgInc[eff & 3]
+                         [(lfoCounter >> (shift > 0 ? shift : 0)) & 7];
+
     if (o.egPhase == 1) {
-        // Attaque : approche exponentielle de 0 (pleine amplitude).
+        // Attaque : approche exponentielle de 0 dB (courbe du matériel,
+        // plus rapide sur les derniers décibels).
         if (eff >= 60) o.egLevel = 0;
-        else           o.egLevel -= (o.egLevel >> 2) + 1;
+        else           o.egLevel -= ((o.egLevel >> 3) + 1) * inc;
         if (o.egLevel <= 0) {
             o.egLevel = 0;
             o.egPhase = 2;
         }
         return;
     }
-    // Decay / sustain percussif / release : +0,375 dB par pas.
-    o.egLevel += 1 + (eff & 3);
+    // Decay / sustain percussif / release : +0,375 dB par pas de base.
+    o.egLevel += inc;
     const int sl = (adsr2 >> 4) * 8;             // sustain level (3 dB -> 8 pas)
     if (o.egPhase == 2 && o.egLevel >= sl)
         o.egPhase = 3;                            // palier de sustain atteint

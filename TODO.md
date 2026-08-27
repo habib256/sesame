@@ -56,9 +56,13 @@ et contraintes de licence détaillées là-bas).
       PSG, save-state (version d'état 2). Validé : fréquence porteuse
       exacte (formule matérielle), spectre sinus propre, bandes latérales
       FM cohérentes, reprise d'état octet-perfect (2026-08)
-- [ ] YM2413, suite : mode rythme (canaux 6-8 percussions), cadences
-      d'enveloppe exactes au cycle, jeu d'instruments ROM vérifié contre un
-      dump matériel (le jeu actuel est une approximation documentée)
+- [x] YM2413, suite : instruments ROM et patches rythme VÉRIFIÉS
+      (valeurs communautaires issues de l'analyse du die — doc andete,
+      publiées dans emu2413/MIT, attribution dans le code) ; cadences
+      d'enveloppe alignées sur les motifs de sous-taux OPL (patterns sur
+      8 pas, attaque exponentielle matérielle). Validé : violon tenu,
+      piano percussif, vibraphone à queue — les caractères réels (2026-08).
+      Reste (non bloquant) : EG exact au cycle près du silicium
 
 ## Machine
 - [x] Save-states — sérialiseur symétrique `StateIO`, fichier versionné

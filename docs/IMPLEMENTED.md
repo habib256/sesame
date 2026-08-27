@@ -101,9 +101,13 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   FM 2 opérateurs, caisse claire (phase XOR bruit), charleston (LFSR
   23 bits), tom (sinus), cymbale (XOR de phases) ; volumes par le câblage
   réel des regs 0x36-0x38, key par front
-- Approximations documentées : cadences d'enveloppe (forme exacte, cycle
-  approché), instruments ROM et patches rythme (jeux approximatifs, dump
-  vérifié en TODO), percussions plausibles mais pas cycle-exactes
+- Instruments ROM et patches rythme VÉRIFIÉS : valeurs communautaires de
+  l'analyse du die (doc andete, jeu publié dans emu2413 de M. Okazaki,
+  MIT — attribution dans le code) ; cadences d'enveloppe alignées sur les
+  motifs de sous-taux OPL (patterns 8 pas, attaque exponentielle)
+- Approximations restantes documentées : EG pas cycle-exact au silicium,
+  percussions à timbres plausibles (le vrai chip mélange des bits de
+  phase précis)
 
 ## Mapper / cartouche (`src/core/Cartridge.cpp`)
 - Mapper Sega standard (0xFFFC-0xFFFF), premier Ko non paginé
