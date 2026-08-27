@@ -44,10 +44,18 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   `PsgBlipTable.inc` commité), deltas + intégrateur. Repliement mesuré à
   ~-67 dB contre ~-19 dB avec l'ancien filtre boîte (2026-08)
 
+## Frontend WebAssembly (`src/wasm/main_wasm.cpp`, `web/index.html`)
+- API C exportée (load_rom via MEMFS, run_frame, framebuffer + fenêtre de
+  recadrage, audio stéréo, manette, pause/reset, région) — construite par
+  `tools/build_wasm.sh` (emcc), produits de build non commités
+- Page autonome : canvas 2D (pixels nets, 4:3 SMS / 10:9 GG), WebAudio,
+  clavier identique au frontend natif, cadence par l'horloge réelle
+
 ## Game Gear (mode natif)
 - Auto-détection par l'extension `.gg` (`Machine::loadRom` -> `setModel`,
-  propagé au VDP et au Bus) ; une `.sms` reste émulée en Master System
-  (le mode compatibilité SMS-sur-GG n'est PAS couvert)
+  propagé au VDP et au Bus) ; une `.sms` reste émulée en Master System,
+  sauf avec `--gg` : mode compatibilité SMS-sur-GG (`Model::GameGearSms`,
+  palette SMS 6 bits mais fenêtre LCD 160×144, NMI Pause accordé)
 - VDP : CRAM 64 octets, écrite PAR MOT (octet pair latché, octet impair
   commite l'entrée 12 bits ----BBBBGGGGRRRR) ; rendu de la trame 256×192
   complète, fenêtre visible 160×144 centrée recadrée par les frontends
@@ -71,9 +79,13 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
 - Sortie native à horloge/72 (~49,7 kHz), moyennée par trame 44,1 kHz et
   mixée par le PSG sur les deux voies ; sérialisée dans les save-states
   (version d'état 2)
+- Mode rythme (reg 0x0E) : canaux 6-8 en cinq percussions — grosse caisse
+  FM 2 opérateurs, caisse claire (phase XOR bruit), charleston (LFSR
+  23 bits), tom (sinus), cymbale (XOR de phases) ; volumes par le câblage
+  réel des regs 0x36-0x38, key par front
 - Approximations documentées : cadences d'enveloppe (forme exacte, cycle
-  approché), instruments ROM (jeu approximatif, dump vérifié en TODO),
-  mode rythme non implémenté
+  approché), instruments ROM et patches rythme (jeux approximatifs, dump
+  vérifié en TODO), percussions plausibles mais pas cycle-exactes
 
 ## Mapper / cartouche (`src/core/Cartridge.cpp`)
 - Mapper Sega standard (0xFFFC-0xFFFF), premier Ko non paginé

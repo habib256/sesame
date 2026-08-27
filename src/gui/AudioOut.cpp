@@ -108,7 +108,53 @@ void AudioOut::stop() {
     queue = nullptr;
 }
 
-#else  // stub muet (Linux : TODO ALSA/PipeWire)
+#elif defined(SESAME_HAVE_ALSA)
+
+#include <alsa/asoundlib.h>
+
+namespace {
+constexpr int kChunkFrames = 512;   // ~11,6 ms par écriture à 44100 Hz
+}  // namespace
+
+bool AudioOut::start() {
+    if (snd_pcm_open(&pcm, "default", SND_PCM_STREAM_PLAYBACK, 0) < 0) {
+        pcm = nullptr;
+        return false;
+    }
+    // Stéréo s16 entrelacé, rééchantillonnage logiciel autorisé, ~50 ms de
+    // latence matérielle demandée.
+    if (snd_pcm_set_params(pcm, SND_PCM_FORMAT_S16_LE,
+                           SND_PCM_ACCESS_RW_INTERLEAVED, 2,
+                           Psg::kSampleRate, 1, 50000) < 0) {
+        snd_pcm_close(pcm);
+        pcm = nullptr;
+        return false;
+    }
+    running.store(true);
+    worker = std::thread([this] {
+        s16 buf[kChunkFrames * 2];
+        while (running.load()) {
+            pull(buf, kChunkFrames);   // complète par du silence si vide
+            const snd_pcm_sframes_t n = snd_pcm_writei(pcm, buf, kChunkFrames);
+            if (n < 0)
+                snd_pcm_recover(pcm, static_cast<int>(n), 1);
+        }
+    });
+    return true;
+}
+
+void AudioOut::stop() {
+    if (!pcm)
+        return;
+    running.store(false);
+    if (worker.joinable())
+        worker.join();
+    snd_pcm_drain(pcm);
+    snd_pcm_close(pcm);
+    pcm = nullptr;
+}
+
+#else  // stub muet (autres plateformes)
 
 bool AudioOut::start() { return false; }
 void AudioOut::stop() {}

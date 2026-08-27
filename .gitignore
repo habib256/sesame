@@ -8,3 +8,8 @@ roms/
 *.sav
 .DS_Store
 __pycache__/
+
+# Produits du build WebAssembly (tools/build_wasm.sh)
+web/sesame.js
+web/sesame.wasm
+!tests/refs/*.ppm

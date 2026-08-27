@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<!-- Copyright (C) 2026 VERHILLE Arnaud
+     SPDX-License-Identifier: GPL-3.0-or-later
+     Ce fichier fait partie de Sesame, distribué sous licence GNU GPL v3
+     (ou ultérieure), SANS AUCUNE GARANTIE : voir le fichier LICENSE. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sesame — SMS / Game Gear emulator</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #101014; color: #ddd;
+         font: 14px/1.5 system-ui, sans-serif;
+         display: flex; flex-direction: column; align-items: center; }
+  h1 { font-size: 18px; margin: 16px 0 4px; }
+  #hint { color: #888; margin: 0 0 12px; }
+  #screen { image-rendering: pixelated; background: #000;
+            border: 1px solid #333; }
+  #bar { margin: 12px 0; display: flex; gap: 12px; align-items: center; }
+  button, input { font: inherit; }
+  #keys { color: #777; font-size: 12px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<h1>Sesame</h1>
+<p id="hint">Load a .sms / .gg / .sg ROM — nothing is uploaded, everything
+runs locally.</p>
+<div id="bar">
+  <input type="file" id="rom" accept=".sms,.gg,.sg">
+  <button id="pause">Pause (console)</button>
+  <button id="reset">Reset</button>
+  <label><input type="checkbox" id="pal"> PAL</label>
+</div>
+<canvas id="screen" width="256" height="192"></canvas>
+<p id="keys">Arrows = D-pad · Z/W = button 1 · X = button 2 ·
+Enter = Pause / Game Gear Start</p>
+
+<script src="sesame.js"></script>
+<script>
+'use strict';
+SesameModule().then((M) => {
+  const call = (name, ret, args, vals) => M.ccall(name, ret, args, vals);
+  const canvas = document.getElementById('screen');
+  const ctx = canvas.getContext('2d');
+  let running = false;
+
+  // --- Chargement de ROM --------------------------------------------------
+  document.getElementById('rom').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const buf = M._malloc(bytes.length);
+    M.HEAPU8.set(bytes, buf);
+    const ok = call('sesame_load_rom', 'number',
+                    ['number', 'number', 'string'],
+                    [buf, bytes.length, file.name]);
+    M._free(buf);
+    if (!ok) { alert('Cannot load ROM'); return; }
+    startAudio();
+    running = true;
+  });
+  document.getElementById('pause').onclick =
+      () => call('sesame_press_pause', null, [], []);
+  document.getElementById('reset').onclick =
+      () => call('sesame_reset', null, [], []);
+  document.getElementById('pal').onchange =
+      (e) => call('sesame_set_region', null, ['number'], [e.target.checked ? 1 : 0]);
+
+  // --- Clavier -> manette 1 (mêmes touches que le frontend natif) ---------
+  // Bits Io::Button : 1 up, 2 down, 4 left, 8 right, 16 B1, 32 B2, 64 Start.
+  let mask = 0;
+  const keyBit = { ArrowUp: 1, ArrowDown: 2, ArrowLeft: 4, ArrowRight: 8,
+                   KeyZ: 16, KeyW: 16, KeyX: 32 };
+  addEventListener('keydown', (e) => {
+    if (e.code in keyBit) { mask |= keyBit[e.code]; e.preventDefault(); }
+    if (e.code === 'Enter' && !e.repeat) {
+      // Game Gear : Start (niveau) ; SMS : bouton Pause (front NMI).
+      if (call('sesame_is_game_gear', 'number', [], [])) mask |= 64;
+      else call('sesame_press_pause', null, [], []);
+      e.preventDefault();
+    }
+  });
+  addEventListener('keyup', (e) => {
+    if (e.code in keyBit) mask &= ~keyBit[e.code];
+    if (e.code === 'Enter') mask &= ~64;
+  });
+
+  // --- Audio : WebAudio tire dans l'anneau stéréo du PSG ------------------
+  let audioCtx = null;
+  function startAudio() {
+    if (audioCtx) return;
+    const rate = call('sesame_sample_rate', 'number', [], []);
+    audioCtx = new AudioContext({ sampleRate: rate });
+    const chunk = 1024;
+    const node = audioCtx.createScriptProcessor(chunk, 0, 2);
+    const buf = M._malloc(chunk * 2 * 2);   // trames stéréo s16
+    node.onaudioprocess = (e) => {
+      const got = call('sesame_audio_read', 'number',
+                       ['number', 'number'], [buf, chunk]);
+      const l = e.outputBuffer.getChannelData(0);
+      const r = e.outputBuffer.getChannelData(1);
+      const base = buf >> 1;
+      for (let i = 0; i < chunk; ++i) {
+        l[i] = i < got ? M.HEAP16[base + i * 2] / 32768 : 0;
+        r[i] = i < got ? M.HEAP16[base + i * 2 + 1] / 32768 : 0;
+      }
+    };
+    node.connect(audioCtx.destination);
+  }
+
+  // --- Boucle vidéo : cadence par l'horloge réelle, pas par le vsync ------
+  let due = performance.now();
+  function tick(now) {
+    requestAnimationFrame(tick);
+    if (!running) return;
+    const period = 100000 / call('sesame_frames_per_second_x100', 'number', [], []);
+    if (now - due > 250) due = now;              // décrochage : on repart
+    let burst = 0;
+    while (now >= due && burst++ < 4) {
+      call('sesame_set_pad', null, ['number', 'number'], [0, mask]);
+      call('sesame_run_frame', null, [], []);
+      due += period;
+    }
+
+    // Recadrage éventuel (Game Gear) et blit du framebuffer RGBA.
+    const stride = call('sesame_stride', 'number', [], []);
+    const vx = call('sesame_view_x', 'number', [], []);
+    const vy = call('sesame_view_y', 'number', [], []);
+    const vw = call('sesame_view_w', 'number', [], []);
+    const vh = call('sesame_view_h', 'number', [], []);
+    if (canvas.width !== vw || canvas.height !== vh) {
+      canvas.width = vw;
+      canvas.height = vh;
+      // SMS : pixels non carrés (4:3) ; Game Gear : pixels carrés (10:9).
+      const gg = call('sesame_is_game_gear', 'number', [], []);
+      canvas.style.width  = gg ? (vw * 3) + 'px' : '768px';
+      canvas.style.height = gg ? (vh * 3) + 'px' : '576px';
+    }
+    const fb = call('sesame_frame_buffer', 'number', [], []);
+    const img = ctx.createImageData(vw, vh);
+    for (let y = 0; y < vh; ++y) {
+      const src = fb + ((vy + y) * stride + vx) * 4;
+      img.data.set(M.HEAPU8.subarray(src, src + vw * 4), y * vw * 4);
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  requestAnimationFrame(tick);
+});
+</script>
+</body>
+</html>

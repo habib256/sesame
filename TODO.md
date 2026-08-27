@@ -32,7 +32,9 @@ et contraintes de licence détaillées là-bas).
 
 ## Son
 - [x] Sortie audio temps réel dans le GUI (CoreAudio/AudioQueue, 2026-08)
-- [ ] Backend audio Linux (ALSA/PipeWire) — stub muet actuellement
+- [x] Backend audio Linux ALSA (thread d'écriture bloquante, stéréo s16,
+      ~50 ms de latence ; stub muet si ALSA absent au configure) —
+      ÉCRIT SANS ÊTRE TESTÉ (pas de machine Linux sous la main) (2026-08)
 - [x] [R] Synthèse à bande limitée pour le PSG (réimplémentation maison de
       la technique Blip Buffer de Blargg : table générée par
       `tools/make_blip_table.py`, deltas + intégrateur ; repliement mesuré
@@ -62,9 +64,11 @@ et contraintes de licence détaillées là-bas).
 - [x] Game Gear, stéréo : chaîne audio en trames stéréo entrelacées de bout
       en bout (PSG par voie selon le registre 0x06, CoreAudio 2 canaux,
       WAV stéréo ; en SMS les deux voies sont identiques) (2026-08)
-- [ ] Game Gear, suite : mode compatibilité SMS-sur-GG (cartouche .sms via
-      adaptateur : palette réduite), shader LCD (rémanence/ghosting de la
-      dalle d'origine)
+- [x] Mode compatibilité SMS-sur-GG (`Model::GameGearSms`, drapeau `--gg`
+      des deux frontends : palette SMS, fenêtre LCD 160x144, NMI Pause
+      accordé) (2026-08)
+- [ ] Game Gear, suite : shader LCD (rémanence/ghosting de la dalle
+      d'origine)
 - [x] Mappers Codemasters (auto-détecté par l'en-tête 0x7FE0, registres
       0x0000/0x4000/0x8000, premier Ko paginé, RAM Ernie Els Golf) et
       coréen (page fenêtre 2 par 0xA000, heuristique gardée par « registres
@@ -86,9 +90,10 @@ et contraintes de licence détaillées là-bas).
 - [ ] Menu kiosk : dossiers ROM additionnels + affectation des manettes
       (parité NeoST)
 - [ ] Presets CRT configurables (--crt-preset / fichier de config)
-- [ ] Build WebAssembly — [R] viabilité prouvée par jgenesis (navigateur) ;
-      le cœur sans dépendance est prêt pour Emscripten, seul le frontend
-      est à adapter
+- [x] Build WebAssembly — `src/wasm/main_wasm.cpp` (API C exportée) +
+      `web/index.html` (canvas 2D, WebAudio, clavier) + `tools/build_wasm.sh`
+      (emcc) ; recadrage GG et .sms/.gg/.sg gérés ; validé sous Node
+      (produits de build non commités) (2026-08)
 
 ## Outils
 - [x] Étalons d'images — `tools/compare_ppm.py` (tolérance/max-diff,

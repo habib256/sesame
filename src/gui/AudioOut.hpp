@@ -12,8 +12,9 @@
 //  sous-alimentation ; en cas de trop-plein — rattrapage après un
 //  décrochage, dérive d'horloges — les plus vieilles trames sont écrasées
 //  pour garder la latence bornée).
-//  Backend : CoreAudio (AudioQueue) sur macOS ; ailleurs, stub muet
-//  (start() retourne false, le frontend continue en silence).
+//  Backends : CoreAudio (AudioQueue) sur macOS ; ALSA sur Linux quand la
+//  bibliothèque est trouvée au configure (SESAME_HAVE_ALSA) ; sinon stub
+//  muet (start() retourne false, le frontend continue en silence).
 // =============================================================================
 #include "core/Types.hpp"
 
@@ -21,6 +22,10 @@
 
 #ifdef __APPLE__
 #include <AudioToolbox/AudioToolbox.h>
+#elif defined(SESAME_HAVE_ALSA)
+#include <atomic>
+#include <thread>
+typedef struct _snd_pcm snd_pcm_t;   // évite <alsa/asoundlib.h> dans le .hpp
 #endif
 
 class AudioOut {
@@ -48,5 +53,11 @@ private:
 #ifdef __APPLE__
     static void queueCallback(void* user, AudioQueueRef q, AudioQueueBufferRef buf);
     AudioQueueRef queue = nullptr;
+#elif defined(SESAME_HAVE_ALSA)
+    // Un thread d'écriture bloquante : il tire dans l'anneau et pousse vers
+    // le périphérique (la latence est fixée par snd_pcm_set_params).
+    std::thread worker;
+    std::atomic<bool> running{false};
+    snd_pcm_t* pcm = nullptr;
 #endif
 };
