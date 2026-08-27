@@ -26,6 +26,11 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
 - 3 canaux carrés + bruit (LFSR Sega 16 bits, blanc/périodique)
 - Période 0/1 = niveau constant (lecture de samples)
 - Sortie 44,1 kHz mono s16 via anneau ; table de volumes 2 dB
+- Rééchantillonnage par synthèse à bande limitée (façon Blip Buffer de
+  Blargg, réimplémentation maison GPL) : marches band-limited pré-calculées
+  (64 phases × 16 coefficients, `tools/make_blip_table.py` →
+  `PsgBlipTable.inc` commité), deltas + intégrateur. Repliement mesuré à
+  ~-67 dB contre ~-19 dB avec l'ancien filtre boîte (2026-08)
 
 ## Mapper / cartouche (`src/core/Cartridge.cpp`)
 - Mapper Sega standard (0xFFFC-0xFFFF), premier Ko non paginé

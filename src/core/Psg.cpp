@@ -16,9 +16,17 @@
 //
 //  Chaîne audio : l'horloge puce est l'horloge CPU (3 579 545 Hz), divisée
 //  par 16 en interne -> un « tick » à 223 721,5 Hz. runCycles() avance tick
-//  par tick, moyenne les sorties entre deux échantillons 44 100 Hz (filtre
-//  boîte, suffisant en v1) et pousse le résultat dans un anneau que le
-//  frontend vide avec readSamples().
+//  par tick et rééchantillonne vers 44 100 Hz par SYNTHÈSE À BANDE LIMITÉE
+//  (technique popularisée par le « Blip Buffer » de Blargg, réimplémentée
+//  ici) : les harmoniques d'une onde carrée dépassent la fréquence de
+//  Nyquist de la sortie, et les échantillonner naïvement les replie dans le
+//  spectre audible (aliasing). À la place, chaque TRANSITION d'amplitude
+//  dépose dans un petit anneau la réponse indicielle d'un passe-bas idéal
+//  fenêtré — une « marche adoucie » étalée sur kBlipTaps échantillons,
+//  pré-calculée pour kBlipPhases positions sous-échantillon du front
+//  (table générée par tools/make_blip_table.py). L'anneau contient des
+//  DELTAS ; l'intégrateur blipSum reconstruit le signal filtré au moment
+//  d'émettre chaque échantillon dans l'anneau de sortie (readSamples()).
 // =============================================================================
 #include "Psg.hpp"
 
@@ -37,6 +45,10 @@ constexpr s16 kVolumeTable[16] = {
     1268, 1008,  800,  636,  505,  401,  319,    0,
 };
 
+// Table des marches à bande limitée (kBlipStep, kBlipPhases, kBlipTaps,
+// kBlipScaleBits) — générée, commitée dans le dépôt.
+#include "PsgBlipTable.inc"
+
 }  // namespace
 
 void Psg::reset() {
@@ -52,8 +64,11 @@ void Psg::reset() {
     noiseFF     = 0;
     clockAcc    = 0;
     resampleAcc = 0;
-    sampleSum   = 0;
-    sampleTicks = 0;
+    sampleIndex = 0;
+    lastAmp     = 0;  // = mix() après reset (tous les volumes à silence)
+    blipSum     = 0;
+    for (int i = 0; i < kBlipBufSize; ++i)
+        blipBuf[i] = 0;
     ringR = ringW = 0;
 }
 
@@ -154,26 +169,56 @@ void Psg::pushSample(s16 s) {
     ringW = next;
 }
 
+// Dépose une transition d'amplitude à la position temporelle courante :
+// échantillon sampleIndex + resampleAcc/cpuClock. La marche s'étale sur les
+// kBlipTaps échantillons À VENIR (front centré au milieu — le son sort avec
+// kBlipTaps/2 échantillons de retard fixe, ~0,18 ms, imperceptible).
+void Psg::addDelta(int delta) {
+    // Phase sous-échantillon du front, quantifiée sur kBlipPhases pas.
+    int phase = (int)(((u64)resampleAcc * kBlipPhases) / (u32)cpuClock);
+    for (int t = 0; t < kBlipTaps; ++t)
+        blipBuf[(sampleIndex + (u64)t) & (kBlipBufSize - 1)] +=
+            delta * kBlipStep[phase][t];
+}
+
+// L'échantillon sampleIndex vient d'être dépassé : plus aucune transition
+// future ne peut le toucher (elles écrivent à partir de sampleIndex + 1).
+// On intègre son delta, on libère la case, et on émet.
+void Psg::finalizeSample() {
+    int slot = (int)(sampleIndex & (kBlipBufSize - 1));
+    blipSum += blipBuf[slot];
+    blipBuf[slot] = 0;
+    // Point fixe -> s16, arrondi au plus proche ; l'ondulation de Gibbs
+    // peut dépasser transitoirement l'amplitude nominale, d'où l'écrêtage.
+    s32 v = (blipSum + (1 << (kBlipScaleBits - 1))) >> kBlipScaleBits;
+    if (v < -32768) v = -32768;
+    if (v > 32767)  v = 32767;
+    pushSample((s16)v);
+}
+
 void Psg::runCycles(int cpuCycles) {
     clockAcc += (u64)cpuCycles;
     while (clockAcc >= (u64)kClockDiv) {
         clockAcc -= (u64)kClockDiv;
         tick();
 
-        // Rééchantillonnage ticks (~223,7 kHz NTSC / ~221,7 kHz PAL) ->
-        // 44 100 Hz sans flottants : on additionne kSampleRate*kClockDiv
-        // (= 705 600) par tick et on émet un échantillon chaque fois qu'on
-        // dépasse l'horloge CPU. L'échantillon émis est la MOYENNE des
-        // sorties accumulées depuis le précédent (~5 ticks), ce qui fait
-        // office de filtre anti-repliement rudimentaire.
-        sampleSum += mix();
-        sampleTicks++;
+        // Seules les TRANSITIONS alimentent la synthèse : tant que la
+        // sortie mixée ne change pas, il n'y a rien à déposer.
+        s16 amp = mix();
+        if (amp != lastAmp) {
+            addDelta(amp - lastAmp);
+            lastAmp = amp;
+        }
+
+        // Cadence de sortie ticks (~223,7 kHz NTSC / ~221,7 kHz PAL) ->
+        // 44 100 Hz sans flottants ni dérive : on additionne
+        // kSampleRate*kClockDiv (= 705 600) par tick et on franchit une
+        // borne d'échantillon chaque fois qu'on dépasse l'horloge CPU.
         resampleAcc += (u32)(kSampleRate * kClockDiv);
         if (resampleAcc >= (u32)cpuClock) {
             resampleAcc -= (u32)cpuClock;
-            pushSample((s16)(sampleSum / sampleTicks));
-            sampleSum   = 0;
-            sampleTicks = 0;
+            finalizeSample();
+            sampleIndex++;
         }
     }
 }

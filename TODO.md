@@ -24,9 +24,10 @@ et contraintes de licence détaillées là-bas).
 ## Son
 - [x] Sortie audio temps réel dans le GUI (CoreAudio/AudioQueue, 2026-08)
 - [ ] Backend audio Linux (ALSA/PipeWire) — stub muet actuellement
-- [ ] [R] Synthèse à bande limitée pour le PSG (Blip Buffer de Blargg ;
-      blip_buf est en LGPL) — remplace l'échantillonnage naïf 44,1 kHz,
-      prérequis pour un YM2413 sans aliasing
+- [x] [R] Synthèse à bande limitée pour le PSG (réimplémentation maison de
+      la technique Blip Buffer de Blargg : table générée par
+      `tools/make_blip_table.py`, deltas + intégrateur ; repliement mesuré
+      -19 dB -> -67 dB, 2026-08) — prérequis YM2413 rempli
 - [ ] YM2413 (FM japonais) — [R] références compatibles licence :
       Gearsystem, jgenesis, `ym2413` de MAME si BSD-3
 

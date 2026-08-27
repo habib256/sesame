@@ -10,6 +10,7 @@
 //  Horloge puce = horloge CPU (3 579 545 Hz) ; diviseur interne /16.
 //  Le cœur produit des échantillons s16 mono à kSampleRate dans un anneau
 //  que le frontend vient vider (GUI : audio temps réel ; headless : WAV).
+//  Rééchantillonnage par synthèse à bande limitée (voir Psg.cpp).
 // =============================================================================
 #include "Types.hpp"
 
@@ -55,12 +56,18 @@ private:
     u64 clockAcc = 0;   // accumulateur cycles CPU -> ticks PSG (/16)
 
     // Rééchantillonnage ticks (223 721,5 Hz) -> kSampleRate par accumulateur
-    // fractionnaire entier + moyenne des sorties entre deux échantillons.
+    // fractionnaire entier ; les transitions d'amplitude passent par une
+    // synthèse à bande limitée (deltas + intégration, voir Psg.cpp).
     u32 resampleAcc = 0;
-    s32 sampleSum   = 0;
-    int sampleTicks = 0;
+    u64 sampleIndex = 0;   // index absolu du prochain échantillon de sortie
+    s16 lastAmp     = 0;   // dernière amplitude mixée vue par la synthèse
+    s32 blipSum     = 0;   // intégrateur de sortie (point fixe kBlipScaleBits)
+    static constexpr int kBlipBufSize = 32;  // > kBlipTaps + 1, puissance de 2
+    s32 blipBuf[kBlipBufSize]{};             // anneau de deltas par échantillon
 
     void tick();             // un pas d'horloge PSG (16 cycles CPU)
     s16  mix() const;        // sortie mixée instantanée des 4 canaux
+    void addDelta(int delta);   // dépose une transition à la position courante
+    void finalizeSample();      // intègre et pousse l'échantillon terminé
     void pushSample(s16 s);  // pousse dans l'anneau (écrase si plein)
 };
