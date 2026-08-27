@@ -142,15 +142,9 @@ void computeViewport(int fbW, int fbH, double target,
 
 int main(int argc, char** argv)
 {
-    if (argc < 2) {
-        std::fprintf(stderr,
-                     "usage: sesame <rom.sms|rom.gg|rom.sg> [--bios FILE] "
-                     "[--no-bios] [--pal] [--gg] [--crt] [--kiosk] "
-                     "[--kiosk-monitor N]\n");
-        std::fprintf(stderr, "error: no ROM file given\n");
-        return 1;
-    }
-
+    // Sans ROM, le frontend démarre quand même : BIOS auto-détecté dans le
+    // dossier courant et menu borne ouvert pour choisir un jeu (usage
+    // typique : `sesame --kiosk` depuis le dossier des ROM).
     const char* romPath  = nullptr;
     const char* biosPath = nullptr;
     bool        pal      = false;
@@ -225,10 +219,14 @@ int main(int argc, char** argv)
     if (auto d = romExt.rfind('.'); d != std::string::npos)
         romExt = romExt.substr(d);
     for (char& c : romExt) c = (char)std::tolower((unsigned char)c);
-    if (!biosPath && !noBios && romPath && !forceGg && romExt == ".sms") {
-        std::string dir = romPath;
-        const auto slash = dir.find_last_of("/\\");
-        dir = (slash == std::string::npos) ? "." : dir.substr(0, slash);
+    if (!biosPath && !noBios && !forceGg &&
+        (!romPath || romExt == ".sms")) {
+        std::string dir = ".";
+        if (romPath) {
+            dir = romPath;
+            const auto slash = dir.find_last_of("/\\");
+            dir = (slash == std::string::npos) ? "." : dir.substr(0, slash);
+        }
         std::error_code ec;
         for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
             if (!e.is_regular_file(ec)) continue;
@@ -262,7 +260,11 @@ int main(int argc, char** argv)
     }
     if (forceGg && machine.model() == Model::Sms)
         machine.setModel(Model::GameGearSms);
-    const char* titlePath = romPath ? romPath : biosPath;
+    const char* titlePath = romPath ? romPath : biosPath;  // peut rester nul
+
+    // Sans ROM : le menu borne s'ouvre au lancement pour choisir un jeu.
+    if (!romPath)
+        openMenu = true;
 
     // --- Fenêtre GLFW (contexte OpenGL de compatibilité par défaut) ----------
     if (!glfwInit()) {
@@ -275,7 +277,8 @@ int main(int argc, char** argv)
         (machine.model() == Model::GameGearSms) ? "Game Gear (SMS mode)"
                                                 : "Master System";
     const std::string title =
-        std::string("Sesame — ") + consoleName + " — " + baseName(titlePath);
+        std::string("Sesame — ") + consoleName +
+        (titlePath ? " — " + baseName(titlePath) : std::string());
 
     // Mode borne : fenêtre créée DIRECTEMENT en plein écran exclusif sur le
     // moniteur choisi (reste au-dessus des panneaux/dock, garde le focus),
@@ -369,7 +372,7 @@ int main(int argc, char** argv)
     // Ouverture : F9 partout ; Start manette et Échap en mode borne.
     KioskMenu menu;
     {
-        std::string dir = titlePath;
+        std::string dir = titlePath ? titlePath : "";
         const std::string::size_type slash = dir.find_last_of("/\\");
         menu.setRomDir(slash == std::string::npos ? "."
                                                   : dir.substr(0, slash));

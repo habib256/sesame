@@ -131,6 +131,9 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   --shot-every, --sdsc, --wav, --pause-at
 - `sesame` (GLFW/OpenGL) : affichage 4:3 redimensionnable, plein écran
   (touche F), clavier, Pause/Reset, --bios, --pal ;
+  démarrage SANS ROM accepté (`sesame --kiosk` depuis le dossier des jeux :
+  BIOS auto-détecté dans le dossier courant, menu borne ouvert au
+  lancement) ;
   BIOS auto-détecté au lancement : sans `--bios`, une image `.sms` dont le
   nom contient « BIOS » dans le dossier de la ROM est chargée dans le slot
   BIOS (première par ordre alphabétique ; `--no-bios` désactive ; jamais
