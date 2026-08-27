@@ -142,8 +142,9 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   filtre CRT en une passe FBO (`src/gui/CrtEffectStack.cpp`, porté de
   NeoST/POM2 : baril, scanlines, shadow mask, vignette, persistance
   phosphore ; GLSL 120→150 avec repli, no-op sûr si le pilote refuse) —
-  `--crt` ou touche C ; mode borne `--kiosk [--kiosk-monitor N]` (plein
-  écran exclusif, curseur masqué, CRT activé) avec menu in-game disponible
+  ACTIF PAR DÉFAUT — `--no-crt` ou touche C pour l'image brute ; mode
+  borne `--kiosk [--kiosk-monitor N]` (plein
+  écran exclusif, curseur masqué) avec menu in-game disponible
   partout (`src/gui/KioskMenu.cpp`, Start manette ou F9 — Échap aussi en
   borne : jeu en pause, liste des .sms
   du dossier de la ROM — hors BIOS —, Resume/Restart/Desktop/Quit ; rendu

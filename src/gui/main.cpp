@@ -8,7 +8,10 @@
 //  Une itération de boucle = une trame émulée, téléversée dans une texture
 //  256×192 puis dessinée en quad 4:3 (letterbox). Le vsync 60 Hz cadence tout.
 //
-//  Usage : sesame <rom.sms> [--bios fichier] [--pal] [--crt] [--kiosk]
+//  Usage : sesame [rom.sms|rom.gg|rom.sg] [--bios fichier] [--no-bios]
+//                 [--pal] [--gg] [--no-crt] [--kiosk] [--kiosk-monitor N]
+//  Sans ROM : BIOS auto-détecté dans le dossier courant + menu borne.
+//  Filtre CRT actif par défaut (--no-crt ou touche C pour l'image brute).
 //  Un fichier dont le nom contient « BIOS » est chargé dans le slot BIOS.
 //  --kiosk = mode borne : plein écran exclusif, curseur masqué, CRT activé.
 // =============================================================================
@@ -148,7 +151,8 @@ int main(int argc, char** argv)
     const char* romPath  = nullptr;
     const char* biosPath = nullptr;
     bool        pal      = false;
-    bool        crtOn    = false;
+    bool        crtOn    = true;   // filtre CRT actif par défaut (--no-crt
+                                   // ou touche C pour l'image brute)
     bool        kiosk    = false;
     int         kioskMonitor = 0;
     long        shotAtFrame  = -1;       // --shot-at : validation du rendu GL
@@ -177,11 +181,12 @@ int main(int argc, char** argv)
         } else if (std::strcmp(argv[i], "--no-bios") == 0) {
             noBios = true;
         } else if (std::strcmp(argv[i], "--crt") == 0) {
-            crtOn = true;
+            crtOn = true;   // déjà le défaut ; accepté pour compatibilité
+        } else if (std::strcmp(argv[i], "--no-crt") == 0) {
+            crtOn = false;  // image brute (la touche C rebascule)
         } else if (std::strcmp(argv[i], "--kiosk") == 0) {
-            // Mode borne : plein écran exclusif, curseur masqué, CRT activé.
+            // Mode borne : plein écran exclusif, curseur masqué.
             kiosk = true;
-            crtOn = true;
         } else if (std::strcmp(argv[i], "--kiosk-monitor") == 0) {
             if (i + 1 >= argc) {
                 std::fprintf(stderr, "error: --kiosk-monitor requires a number\n");
@@ -383,9 +388,9 @@ int main(int argc, char** argv)
 
     long displayedFrames = 0;   // compteur d'itérations d'affichage (--shot-at)
 
-    // Pile d'effets CRT : initialisée paresseusement à la première activation
-    // (--crt, --kiosk, ou touche C). En cas d'échec (shader/FBO), process()
-    // renvoie 0 et on retombe sur le rendu brut.
+    // Pile d'effets CRT : active par DÉFAUT (initialisée ici), --no-crt ou
+    // la touche C rendent l'image brute. En cas d'échec (shader/FBO),
+    // process() renvoie 0 et on retombe sur le rendu brut.
     CrtEffectStack crt;
     bool crtWasDown = false;
     if (crtOn && !crt.initialize())
