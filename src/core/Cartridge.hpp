@@ -54,6 +54,12 @@ public:
     bool loaded() const { return !rom.empty(); }
     size_t romSize() const { return rom.size(); }
 
+    // Empreinte de la ROM chargée (taille ^ somme des octets, calculée par
+    // load()) : enregistrée dans l'en-tête des save-states pour refuser un
+    // état pris sur une autre cartouche (rewind à travers un changement de
+    // jeu, .state d'un autre titre). 0 si aucune ROM.
+    u32 fingerprint() const { return romFp; }
+
     // Écrit la RAM de sauvegarde dans le .sav si elle a été modifiée depuis
     // le dernier appel (no-op sinon : appelable périodiquement sans coût).
     void persistSaveRam();
@@ -85,7 +91,12 @@ private:
     bool cmRamEnabled = false;   // Codemasters : RAM 8 Ko sur 0xA000-0xBFFF
     u8 cmRam[0x2000]{};          // (volatile — pas de pile sur ces cartouches)
     bool segaRegsSeen = false;   // garde de l'heuristique coréenne
+    // Garde de l'heuristique Janggun : 0xFFFD (fenêtre 0) n'existe PAS sur
+    // le matériel Janggun, mais le boot d'un jeu Sega standard l'écrit
+    // toujours — sa présence disqualifie une écriture parasite à 0x6000.
+    bool fffdSeen = false;
     int romMask = 0;      // masque de page (nombre de pages arrondi puissance de 2)
+    u32 romFp = 0;        // empreinte de la ROM (voir fingerprint())
     std::string savePath;     // <rom sans extension>.sav
     bool saveRamDirty = false;
 

@@ -234,6 +234,10 @@ u8 Vdp::hCounter() const {
 // sur deux : 171 valeurs, séquence 0x00-0x93 puis saut à 0xE9-0xFF
 // (réf. SMS Power!, « VDP - H-counter values »).
 void Vdp::latchHCounter(int cycleInLine) {
+    // Garde : l'appelant fournit une position repliée (0..227) ; on borne
+    // par sécurité pour ne jamais sortir de la séquence matérielle.
+    if (cycleInLine < 0)    cycleInLine = 0;
+    if (cycleInLine >= 228) cycleInLine = 227;
     const int pixel = cycleInLine * 342 / 228;   // horloge pixel = 1,5x CPU
     int hc = pixel >> 1;
     if (hc > 0x93)
@@ -273,6 +277,7 @@ bool Vdp::frameDone() {
 void Vdp::catchUp(int cycleInLine) {
     if (curLine >= height() || (regs[0] & 0x04) == 0)
         return;
+    if (cycleInLine < 0) cycleInLine = 0;   // garde : position repliée attendue
     int target = cycleInLine * 342 / 228;   // horloge pixel = 1,5x CPU
     if (target > kWidth) target = kWidth;
     if (target <= beamX) return;

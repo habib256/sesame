@@ -8,9 +8,11 @@
 // =============================================================================
 #include "Config.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -43,6 +45,12 @@ float parseFloat(const std::string& v, float fallback) {
 int parseInt(const std::string& v, int fallback) {
     try { return std::stoi(v); } catch (...) { return fallback; }
 }
+
+// Bornes de domaine : un fichier édité à la main (ou corrompu) ne doit pas
+// pouvoir produire un réglage absurde — les plages sont celles documentées
+// en commentaire par save().
+float clampf(float v, float lo, float hi) { return std::min(std::max(v, lo), hi); }
+int   clampi(int v, int lo, int hi)       { return std::min(std::max(v, lo), hi); }
 
 const char* maskName(CrtParams::ShadowMask m) {
     switch (m) {
@@ -128,16 +136,39 @@ bool Config::load(const std::string& p) {
             std::fprintf(stderr, "config: unknown key '%s' ignored\n",
                          key.c_str());
     }
+
+    // Bornage après lecture : les plages sont celles des commentaires écrits
+    // par save(). rewind_seconds surtout — l'historique coûte ~5,5 Mo/s, une
+    // valeur folle serait un épuisement mémoire garanti.
+    kioskMonitor    = clampi(kioskMonitor, 0, 15);
+    rewindSeconds   = clampi(rewindSeconds, 1, 120);
+    lcdPersistence  = clampf(lcdPersistence, 0.0f, 0.98f);
+    lcdGridStrength = clampf(lcdGridStrength, 0.0f, 1.0f);
+    CrtParams& c = crtParams;
+    c.brightness         = clampf(c.brightness, -0.5f, 0.5f);
+    c.contrast           = clampf(c.contrast, 0.5f, 1.5f);
+    c.saturation         = clampf(c.saturation, 0.0f, 2.0f);
+    c.hue                = clampf(c.hue, -0.5f, 0.5f);
+    c.sharpness          = clampf(c.sharpness, 0.0f, 1.0f);
+    c.persistence        = clampf(c.persistence, 0.0f, 0.98f);
+    c.scanlines          = clampf(c.scanlines, 0.0f, 1.0f);
+    c.barrel             = clampf(c.barrel, 0.0f, 0.2f);
+    c.shadowMaskStrength = clampf(c.shadowMaskStrength, 0.0f, 1.0f);
+    c.luminanceGain      = clampf(c.luminanceGain, 1.0f, 2.0f);
+    c.centerLighting     = clampf(c.centerLighting, 0.5f, 1.0f);
+    c.phosphorGamma      = clampf(c.phosphorGamma, 0.6f, 2.6f);
     return true;
 }
 
 bool Config::save() const {
-    std::ofstream f(path, std::ios::trunc);
+    // Écriture ATOMIQUE : fichier temporaire puis rename — une coupure de
+    // courant pendant l'écriture (borne éteinte à l'interrupteur) ne doit
+    // jamais laisser un sesame.cfg tronqué à la place de l'ancien.
+    const std::string tmpPath = path + ".tmp";
+    std::ofstream f(tmpPath, std::ios::trunc);
     if (!f)
         return false;
     const CrtParams& c = crtParams;
-    const CrtParams d;   // défauts, pour les bornes en commentaire
-    (void)d;
     f << "# Sesame configuration - rewritten on clean exit.\n"
          "# Command-line flags override this file for one launch;\n"
          "# the effective settings are then saved back here.\n"
@@ -189,7 +220,22 @@ bool Config::save() const {
          "# --- Game Gear LCD look (replaces the CRT filter in GG mode) ---\n"
       << "lcd_persistence = " << lcdPersistence << "   # 0..0.98 ghosting\n"
       << "lcd_grid_strength = " << lcdGridStrength << " # 0..1 pixel grid\n";
-    return f.good();
+    f.flush();
+    if (!f.good()) {
+        f.close();
+        std::error_code ec;
+        std::filesystem::remove(tmpPath, ec);   // ne pas laisser traîner
+        return false;
+    }
+    f.close();
+    std::error_code ec;
+    std::filesystem::rename(tmpPath, path, ec);  // remplace l'ancien d'un coup
+    if (ec) {
+        std::error_code ec2;
+        std::filesystem::remove(tmpPath, ec2);
+        return false;
+    }
+    return true;
 }
 
 Config Config::locate(const char* explicitPath, const char* argv0) {

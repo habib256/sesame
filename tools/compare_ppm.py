@@ -23,13 +23,20 @@ def read_ppm(path):
     with open(path, 'rb') as f:
         data = f.read()
     # En-tête ASCII : magic, largeur, hauteur, maxval (commentaires ignorés).
+    # Toutes les boucles sont BORNÉES : un fichier tronqué ou vide doit
+    # produire une erreur, jamais un blocage (la suite de tests en dépend).
     tokens, i = [], 0
     while len(tokens) < 4:
+        if i >= len(data):
+            raise ValueError(f'{path}: truncated PPM header')
         if data[i:i + 1] == b'#':
-            i = data.index(b'\n', i) + 1
+            nl = data.find(b'\n', i)
+            if nl < 0:
+                raise ValueError(f'{path}: truncated PPM header')
+            i = nl + 1
             continue
         j = i
-        while data[j:j + 1] not in (b' ', b'\t', b'\n', b'\r'):
+        while j < len(data) and data[j:j + 1] not in (b' ', b'\t', b'\n', b'\r'):
             j += 1
         if j > i:
             tokens.append(data[i:j])

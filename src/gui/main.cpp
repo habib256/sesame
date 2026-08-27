@@ -532,8 +532,10 @@ int main(int argc, char** argv)
             glfwSetWindowShouldClose(win, GLFW_TRUE);
 
         // R = reset matériel de la console (pas pendant le menu).
-        if (!menu.isOpen() && glfwGetKey(win, GLFW_KEY_R) == GLFW_PRESS)
+        if (!menu.isOpen() && glfwGetKey(win, GLFW_KEY_R) == GLFW_PRESS) {
             machine.reset();
+            rewindHist.clear();   // l'historique d'avant reset est caduc
+        }
 
         // F = bascule plein écran (sur FRONT d'appui).
         const bool fsDown = glfwGetKey(win, GLFW_KEY_F) == GLFW_PRESS;
@@ -562,8 +564,11 @@ int main(int argc, char** argv)
             const std::string statePath = statePathFor(currentRomPath);
             if (f5Down && !f5WasDown && machine.saveState(statePath))
                 std::fprintf(stderr, "state: saved %s\n", statePath.c_str());
-            if (f7Down && !f7WasDown && !machine.loadState(statePath))
-                machine.reset();  // chargement raté : état mixte, on repart
+            if (f7Down && !f7WasDown) {
+                if (!machine.loadState(statePath))
+                    machine.reset();  // chargement raté : état mixte, on repart
+                rewindHist.clear();   // l'historique d'avant le saut est caduc
+            }
         }
         f5WasDown = f5Down;
         f7WasDown = f7Down;
@@ -612,6 +617,8 @@ int main(int argc, char** argv)
                 // Insérer une cartouche = sauvegarde de l'ancienne RAM puis
                 // power-cycle (le BIOS éventuel reste en place et boote le jeu).
                 machine.cart.persistSaveRam();
+                rewindHist.clear();   // ne jamais rembobiner à travers un
+                                      // changement de cartouche
                 if (machine.loadRom(menu.chosenRom())) {
                     currentRomPath = menu.chosenRom();
                     // loadRom() peut changer de modèle (.sms <-> .gg) ; en
@@ -631,6 +638,7 @@ int main(int argc, char** argv)
                 break;
             case KioskMenu::Action::Restart:
                 machine.reset();
+                rewindHist.clear();   // l'historique d'avant reset est caduc
                 break;
             case KioskMenu::Action::ToggleFullscreen:
                 toggleFullscreen();
@@ -815,6 +823,9 @@ int main(int argc, char** argv)
         if (shotPath && displayedFrames >= shotAtFrame) {
             std::vector<unsigned char> px(
                 static_cast<size_t>(fbW) * fbH * 3);
+            // Alignement 1 : par défaut GL aligne chaque ligne sur 4 octets
+            // et déborderait du buffer dès que fbW n'est pas multiple de 4.
+            glPixelStorei(GL_PACK_ALIGNMENT, 1);
             glReadPixels(0, 0, fbW, fbH, GL_RGB, GL_UNSIGNED_BYTE, px.data());
             if (FILE* f = std::fopen(shotPath, "wb")) {
                 std::fprintf(f, "P6\n%d %d\n255\n", fbW, fbH);

@@ -66,7 +66,10 @@ u8 Bus::ioRead(u8 port) {
     switch (port & 0xC0) {
     case 0x00:
         // Game Gear : ports dédiés 0x00-0x06 (Start/région, EXT, série).
-        if (model == Model::GameGear && port <= 0x06)
+        // La puce GG les décode TOUJOURS, y compris en mode compatibilité
+        // SMS (adaptateur) — c'est le matériel, pas la cartouche.
+        if ((model == Model::GameGear || model == Model::GameGearSms) &&
+            port <= 0x06)
             return io->readGgPort(port);
         // SMS2 : lecture non fiable ; on retourne 0xFF (bus flottant).
         return 0xFF;
@@ -86,7 +89,11 @@ u8 Bus::ioRead(u8 port) {
 void Bus::ioWrite(u8 port, u8 v) {
     switch (port & 0xC0) {
     case 0x00:
-        if (model == Model::GameGear && port <= 0x06) {
+        // Ports GG décodés aussi en mode compatibilité SMS (voir ioRead) :
+        // sans quoi une écriture au port 0x06 tomberait dans memControl et
+        // pourrait débrayer la cartouche ou la work RAM.
+        if ((model == Model::GameGear || model == Model::GameGearSms) &&
+            port <= 0x06) {
             // 0x06 : stéréo PSG ; 0x00-0x05 : Start/EXT/série, écritures
             // sans effet (0x00 est en lecture seule, le lien série n'est
             // pas émulé).

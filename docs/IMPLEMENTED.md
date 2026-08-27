@@ -146,8 +146,9 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
 - Sérialiseur SYMÉTRIQUE : chaque puce liste ses champs une seule fois dans
   `serialize(StateIO&)` (écrits en Save, relus en Load — désynchronisation
   impossible) ; little-endian explicite, portable
-- Fichier versionné : en-tête « SESAMEST » + version + modèle + région,
-  vérifiés au chargement (refus d'un état d'une autre machine)
+- Fichier versionné : en-tête « SESAMEST » + version + modèle + région +
+  empreinte ROM (taille ^ somme), vérifiés au chargement (refus d'un état
+  d'une autre machine OU d'une autre cartouche — v7)
 - Pris en FRONTIÈRE de trame ; non sérialisés : framebuffer VDP (reconstruit
   par la trame suivante), anneau audio (vidé), manettes (entrées vivantes),
   journal SDSC, ROM (vient du fichier chargé) ; RAM cartouche marquée

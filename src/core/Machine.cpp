@@ -91,7 +91,6 @@ void Machine::runFrame() {
         ym.runCycles(c);   // AVANT le PSG : il vient chercher la sortie FM
         psg.runCycles(c);
         lineCycles += c;
-        bus.lineCycles = lineCycles;   // pour le latch HCounter (front TH)
         while (lineCycles >= kCyclesPerLine) {
             lineCycles -= kCyclesPerLine;
             vdp.runLine();
@@ -111,6 +110,11 @@ void Machine::runFrame() {
                     vdp.latchHCounterForX(gunX);   // entrée dans la fenêtre
             }
         }
+        // Position dans la ligne publiée APRÈS le repli : le Bus s'en sert
+        // pour le rattrapage de faisceau et le latch HCounter pendant la
+        // prochaine instruction — une valeur non repliée (>= 228) ferait
+        // rendre la ligne entière d'un coup et latcherait un HC aberrant.
+        bus.lineCycles = lineCycles;
     } while (!vdp.frameDone());
     frameCount++;
 }
@@ -121,7 +125,8 @@ void Machine::runFrame() {
 // -----------------------------------------------------------------------------
 namespace {
 constexpr char kStateMagic[8] = {'S','E','S','A','M','E','S','T'};
-constexpr u32  kStateVersion  = 6;  // v5 rythme ; v6 Janggun + 93C46
+constexpr u32  kStateVersion  = 7;  // v6 Janggun + 93C46 ; v7 empreinte ROM
+                                    // dans l'en-tête + garde Janggun (0xFFFD)
 }  // namespace
 
 void Machine::serializeAll(StateIO& s) {
@@ -142,10 +147,12 @@ bool Machine::writeState(FILE* f) {
     u32 version = kStateVersion;
     u8  model   = (u8)model_;
     u8  region  = (u8)region_;
+    u32 romFp   = cart.fingerprint();
     s.bytes((u8*)(void*)kStateMagic, sizeof(kStateMagic));
     s.u32v(version);
     s.u8v(model);
     s.u8v(region);
+    s.u32v(romFp);   // refuse un état pris sur une autre cartouche
     serializeAll(s);
     return s.ok();
 }
@@ -155,10 +162,12 @@ bool Machine::readState(FILE* f, const char* what) {
     char magic[8] = {};
     u32  version  = 0;
     u8   model = 0, region = 0;
+    u32  romFp = 0;
     s.bytes((u8*)magic, sizeof(magic));
     s.u32v(version);
     s.u8v(model);
     s.u8v(region);
+    s.u32v(romFp);
     bool ok = s.ok();
     if (ok && std::memcmp(magic, kStateMagic, sizeof(magic)) != 0) {
         std::fprintf(stderr, "error: '%s' is not a Sesame state\n", what);
@@ -173,6 +182,11 @@ bool Machine::readState(FILE* f, const char* what) {
         std::fprintf(stderr,
                      "error: state is for another machine "
                      "(model/region mismatch)\n");
+        ok = false;
+    }
+    if (ok && romFp != cart.fingerprint()) {
+        std::fprintf(stderr,
+                     "error: state '%s' is for another ROM\n", what);
         ok = false;
     }
     if (ok) {

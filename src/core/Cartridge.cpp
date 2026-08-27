@@ -36,13 +36,27 @@ const BitRev kBitRev;
 }  // namespace
 
 bool Cartridge::load(const std::string& path) {
+    // Invariant : après un échec, la cartouche est VIDE (loaded() == false),
+    // jamais à moitié chargée — le Bus ne doit pas pouvoir sélectionner une
+    // ROM fantôme.
+    auto fail = [this] {
+        rom.clear();
+        romMask = 0;
+        romFp = 0;
+        return false;
+    };
+
     std::ifstream f(path, std::ios::binary | std::ios::ate);
     if (!f)
-        return false;
+        return fail();
 
     std::streamoff size = f.tellg();
     if (size <= 0)
-        return false;
+        return fail();
+    // Borne large : la plus grosse cartouche SMS/GG connue fait 1 Mo — au
+    // delà de 8 Mo, ce n'est pas une ROM (fichier passé par erreur).
+    if (size > 8 * 1024 * 1024)
+        return fail();
 
     // Certains vieux dumpers ajoutaient un en-tête parasite de 512 octets :
     // on le détecte (taille = multiple de 16 Ko + 512) et on le saute.
@@ -52,12 +66,12 @@ bool Cartridge::load(const std::string& path) {
         size -= 512;
     }
     if (size <= 0)
-        return false;
+        return fail();
 
     rom.resize(static_cast<size_t>(size));
     f.seekg(skip, std::ios::beg);
     if (!f.read(reinterpret_cast<char*>(rom.data()), size))
-        return false;
+        return fail();
 
     // Une ROM plus petite qu'une page (16 Ko) est traitée comme une page
     // complète : on la complète par miroir d'elle-même.
@@ -78,6 +92,13 @@ bool Cartridge::load(const std::string& path) {
     while (rom.size() < pow2 * 0x4000)
         rom.push_back(rom[rom.size() % original]);
     romMask = static_cast<int>(pow2 - 1);
+
+    // Empreinte (taille ^ somme) : identifie la cartouche dans les
+    // save-states — voir fingerprint().
+    u32 sum32 = 0;
+    for (u8 b : rom)
+        sum32 += b;
+    romFp = sum32 ^ static_cast<u32>(rom.size());
 
     // Détection du mapper Codemasters par l'en-tête cartouche à 0x7FE0 :
     // octet 0 = nombre de banques de 16 Ko, mots 0x7FE6/0x7FE8 = somme de
@@ -154,6 +175,7 @@ void Cartridge::reset() {
     ramControl = 0;
     cmRamEnabled = false;
     segaRegsSeen = false;
+    fffdSeen = false;
     // 93C46 : lignes au repos, contenu CONSERVÉ (c'est une EEPROM).
     ee.phase = 0; ee.bits = 0; ee.outBits = 0;
     ee.writeEnabled = false; ee.doLine = true;
@@ -273,8 +295,11 @@ void Cartridge::write(u16 addr, u8 v) {
 
     // Heuristique Janggun : l'adresse 0x6000 n'est un registre de page QUE
     // sur cette cartouche (8 Ko). On reprend les fenêtres 16 Ko courantes
-    // en paires 8 Ko puis on applique l'écriture.
-    if (addr == 0x6000 && rom.size() > 0x8000) {
+    // en paires 8 Ko puis on applique l'écriture. Garde-fou : 0xFFFD
+    // n'existe pas sur le matériel Janggun mais le boot d'un jeu Sega
+    // standard l'écrit toujours — s'il a été vu, l'écriture à 0x6000 est un
+    // parasite (LDIR qui déborde, pointeur fou), pas un registre de page.
+    if (addr == 0x6000 && !fffdSeen && rom.size() > 0x8000) {
         mapperType = Mapper::Janggun;
         pageReg8[0] = static_cast<u8>(pageReg[1] * 2);
         pageReg8[1] = v;
@@ -301,7 +326,7 @@ void Cartridge::writeMapper(u16 addr, u8 v) {
         return;
     switch (addr) {
     case 0xFFFC: ramControl = v; break;  // contrôle RAM de sauvegarde
-    case 0xFFFD: pageReg[0] = v; segaRegsSeen = true; break;
+    case 0xFFFD: pageReg[0] = v; segaRegsSeen = true; fffdSeen = true; break;
     case 0xFFFE: pageReg[1] = v; segaRegsSeen = true; break;
     case 0xFFFF: pageReg[2] = v; segaRegsSeen = true; break;
     default: break;
@@ -435,6 +460,7 @@ void Cartridge::serialize(StateIO& s) {
     s.boolv(cmRamEnabled);
     s.bytes(cmRam, sizeof(cmRam));
     s.boolv(segaRegsSeen);
+    s.boolv(fffdSeen);
     for (u16& w : ee.data) s.u16v(w);
     s.u8v(ee.phase);
     s.u16v(ee.shiftIn);
