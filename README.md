@@ -19,8 +19,8 @@ the GUI; the `Bus` class *is* the memory map.
 - Game Gear mode (auto-detected from `.gg`): 12-bit palette, 160x144
   cropped display, Start button, per-channel stereo panning, GG-specific
   ports
-- Standard Sega mapper, `.sms`/`.gg` ROM loading (512-byte dumper headers
-  tolerated)
+- Sega, Codemasters (auto-detected, incl. Ernie Els RAM) and Korean
+  mappers; `.sms`/`.gg` ROM loading (512-byte dumper headers tolerated)
 - Two controllers, Pause (NMI), Reset
 - BIOS slot with real memory-control port (`$3E`): boots BIOS images and
   BIOS + cartridge combos

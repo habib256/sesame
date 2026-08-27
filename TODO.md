@@ -60,7 +60,12 @@ et contraintes de licence détaillées là-bas).
 - [ ] Game Gear, suite : mode compatibilité SMS-sur-GG (cartouche .sms via
       adaptateur : palette réduite), shader LCD (rémanence/ghosting de la
       dalle d'origine)
-- [ ] Mappers exotiques (Codemasters, Korean/Janggun) ; [R] EEPROM 93C46
+- [x] Mappers Codemasters (auto-détecté par l'en-tête 0x7FE0, registres
+      0x0000/0x4000/0x8000, premier Ko paginé, RAM Ernie Els Golf) et
+      coréen (page fenêtre 2 par 0xA000, heuristique gardée par « registres
+      Sega jamais écrits ») — ROMs de test `cmtest.sms`/`krtest.sms` dans
+      la suite (23 checks), état v3 (2026-08)
+- [ ] Mappers restants : Janggun (8 Ko, octets miroirs), [R] EEPROM 93C46
       (cartouches de baseball, sauvegarde des stats)
 - [x] Sauvegarde RAM cartouche sur disque (.sav — GUI toujours, headless
       opt-in via --sav pour rester déterministe, 2026-08)

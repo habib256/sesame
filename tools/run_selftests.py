@@ -166,6 +166,22 @@ def main():
             check(f'VDP scene "{name}" matches reference',
                   cmp_run.returncode == 0, cmp_run.stdout.strip())
 
+    # --- 6. ROM de test des mappers exotiques (Codemasters, coréen) ----------
+    gen = subprocess.run(
+        [sys.executable, str(ROOT / 'tools' / 'make_mapper_roms.py')],
+        capture_output=True, text=True)
+    if check('generate mapper test ROMs', gen.returncode == 0,
+             gen.stderr.strip() or gen.stdout.strip()):
+        for rom_name, verdicts in (
+                ('cmtest.sms', ['CM1 OK', 'CM2 OK', 'CM3 OK', 'CM4 OK']),
+                ('krtest.sms', ['KR1 OK'])):
+            run = subprocess.run(
+                [str(HEADLESS), str(ROOT / 'roms' / rom_name),
+                 '--frames', '10', '--sdsc'],
+                capture_output=True, text=True, timeout=120, cwd=ROOT)
+            for verdict in verdicts:
+                check(f'{rom_name} reports "{verdict}"', verdict in run.stdout)
+
     # --- Verdict global ------------------------------------------------------
     failed = [name for name, ok, _ in results if not ok]
     print()

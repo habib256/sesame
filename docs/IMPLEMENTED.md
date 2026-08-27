@@ -71,6 +71,13 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
 
 ## Mapper / cartouche (`src/core/Cartridge.cpp`)
 - Mapper Sega standard (0xFFFC-0xFFFF), premier Ko non paginé
+- Mapper Codemasters : auto-détecté (en-tête 0x7FE0 : nombre de banques +
+  somme de contrôle et complément), registres aux adresses 0x0000/0x4000/
+  0x8000, premier Ko paginé comme le reste, RAM 8 Ko volatile sur
+  0xA000-0xBFFF via bit 7 de 0x4000 (Ernie Els Golf)
+- Mapper coréen : page de la fenêtre 2 par écriture à 0xA000 ; détection
+  heuristique à l'exécution (écriture à 0xA000 alors que les registres
+  Sega n'ont jamais été touchés), type sérialisé dans les save-states (v3)
 - RAM cartouche 2×16 Ko (bit3/bit2 de 0xFFFC), persistée en `<rom>.sav`
   (GUI : toujours, avec sauvegarde périodique ~5 s ; headless : opt-in
   `--sav` pour préserver le déterminisme des traces)

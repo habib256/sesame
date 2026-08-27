@@ -63,6 +63,20 @@ bool Cartridge::load(const std::string& path) {
         rom.push_back(rom[rom.size() % original]);
     romMask = static_cast<int>(pow2 - 1);
 
+    // Détection du mapper Codemasters par l'en-tête cartouche à 0x7FE0 :
+    // octet 0 = nombre de banques de 16 Ko, mots 0x7FE6/0x7FE8 = somme de
+    // contrôle et son complément à 0x10000. Les trois conditions ensemble
+    // rendent les faux positifs improbables.
+    mapperType = Mapper::Sega;
+    if (rom.size() >= 0x8000) {
+        const unsigned banks = rom[0x7FE0];
+        const unsigned sum = rom[0x7FE6] | (rom[0x7FE7] << 8);
+        const unsigned inv = rom[0x7FE8] | (rom[0x7FE9] << 8);
+        if (sum != 0 && ((sum + inv) & 0xFFFF) == 0 &&
+            banks == rom.size() / 0x4000)
+            mapperType = Mapper::Codemasters;
+    }
+
     // Persistance de la RAM de sauvegarde : « <rom sans extension>.sav » à
     // côté de la ROM. Un .sav existant est rechargé (jeu commencé sur pile).
     savePath.clear();
@@ -97,17 +111,34 @@ void Cartridge::persistSaveRam() {
 }
 
 void Cartridge::reset() {
-    // État de mise sous tension du mapper : fenêtres 0/1/2, RAM désactivée.
+    // État de mise sous tension du mapper : fenêtres 0/1/2 (0/1/0 pour
+    // Codemasters), RAM désactivée. Le TYPE de mapper est une propriété de
+    // la cartouche : il survit au reset (y compris un type coréen détecté
+    // à l'exécution).
     pageReg[0] = 0;
     pageReg[1] = 1;
-    pageReg[2] = 2;
+    pageReg[2] = (mapperType == Mapper::Codemasters) ? 0 : 2;
     ramControl = 0;
+    cmRamEnabled = false;
+    segaRegsSeen = false;
 }
 
 u8 Cartridge::read(u16 addr) {
     if (rom.empty())
         return 0xFF;  // pas de cartouche : bus flottant
 
+    if (mapperType == Mapper::Codemasters) {
+        // Codemasters : trois fenêtres pleines (le premier Ko est paginé
+        // comme le reste) ; RAM 8 Ko optionnelle sur 0xA000-0xBFFF.
+        if (addr >= 0xA000 && cmRamEnabled)
+            return cmRam[addr & 0x1FFF];
+        const int slot = addr >> 14;
+        return rom[(static_cast<size_t>(pageReg[slot] & romMask) << 14) |
+                   (addr & 0x3FFF)];
+    }
+
+    // Mappers Sega et coréen (même plan de lecture ; le coréen n'écrit
+    // simplement jamais pageReg[0]/[1] ni le contrôle RAM).
     // 0x0000-0x03FF : TOUJOURS le début physique de la ROM, jamais paginé
     // (c'est là que vivent les vecteurs d'interruption du Z80).
     if (addr < 0x0400)
@@ -129,21 +160,58 @@ u8 Cartridge::read(u16 addr) {
 }
 
 void Cartridge::write(u16 addr, u8 v) {
-    // Seule la fenêtre 0x8000-0xBFFF est inscriptible, et uniquement quand la
-    // RAM cartouche y est mappée ; toute autre écriture est ignorée (ROM).
+    if (mapperType == Mapper::Codemasters) {
+        // Registres de page aux adresses 0x0000/0x4000/0x8000. Le bit 7 de
+        // 0x4000 mappe la RAM 8 Ko sur 0xA000-0xBFFF (Ernie Els Golf).
+        switch (addr) {
+        case 0x0000: pageReg[0] = v; return;
+        case 0x4000:
+            cmRamEnabled = (v & 0x80) != 0;
+            pageReg[1] = (u8)(v & 0x7F);
+            return;
+        case 0x8000: pageReg[2] = v; return;
+        default:
+            if (addr >= 0xA000 && addr < 0xC000 && cmRamEnabled)
+                cmRam[addr & 0x1FFF] = v;
+            return;
+        }
+    }
+
+    if (mapperType == Mapper::Korean) {
+        if (addr == 0xA000)
+            pageReg[2] = v;
+        return;
+    }
+
+    // Mapper Sega : seule la fenêtre 0x8000-0xBFFF est inscriptible, quand
+    // la RAM cartouche y est mappée.
     if (addr >= 0x8000 && addr < 0xC000 && (ramControl & 0x08)) {
         cartRam[(ramControl >> 2) & 1][addr & 0x3FFF] = v;
         saveRamDirty = true;
+        return;
+    }
+
+    // Heuristique coréenne (pas d'en-tête sur ces cartouches) : une
+    // écriture à 0xA000 alors que les registres Sega 0xFFFD-0xFFFF n'ont
+    // JAMAIS été touchés et que la RAM n'est pas mappée trahit le mapper
+    // coréen — on bascule et on applique la page.
+    if (addr == 0xA000 && !segaRegsSeen && rom.size() > 0x8000) {
+        mapperType = Mapper::Korean;
+        pageReg[2] = v;
     }
 }
 
 void Cartridge::writeMapper(u16 addr, u8 v) {
-    // Registres du mapper, « sous » le miroir RAM (le Bus écrit les deux).
+    // Registres du mapper Sega, « sous » le miroir RAM (le Bus écrit les
+    // deux). Les cartouches Codemasters et coréennes n'ont pas de logique
+    // à ces adresses.
+    if (mapperType != Mapper::Sega)
+        return;
     switch (addr) {
     case 0xFFFC: ramControl = v; break;  // contrôle RAM de sauvegarde
-    case 0xFFFD: pageReg[0] = v; break;  // fenêtre 0x0000-0x3FFF
-    case 0xFFFE: pageReg[1] = v; break;  // fenêtre 0x4000-0x7FFF
-    case 0xFFFF: pageReg[2] = v; break;  // fenêtre 0x8000-0xBFFF
+    case 0xFFFD: pageReg[0] = v; segaRegsSeen = true; break;
+    case 0xFFFE: pageReg[1] = v; segaRegsSeen = true; break;
+    case 0xFFFF: pageReg[2] = v; segaRegsSeen = true; break;
     default: break;
     }
 }
@@ -154,9 +222,16 @@ void Cartridge::writeMapper(u16 addr, u8 v) {
 //  modifiée pour que la persistance .sav reparte de l'état restauré.
 // -----------------------------------------------------------------------------
 void Cartridge::serialize(StateIO& s) {
+    u8 type = (u8)mapperType;
+    s.u8v(type);
+    if (s.loading())
+        mapperType = (Mapper)type;   // un type coréen détecté est restauré
     s.bytes(pageReg, sizeof(pageReg));
     s.u8v(ramControl);
     s.bytes(&cartRam[0][0], sizeof(cartRam));
+    s.boolv(cmRamEnabled);
+    s.bytes(cmRam, sizeof(cmRam));
+    s.boolv(segaRegsSeen);
     if (s.loading())
         saveRamDirty = true;
 }

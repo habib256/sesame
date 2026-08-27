@@ -47,8 +47,10 @@ python3 tools/run_selftests.py            # la suite complète
 
 - Manettes : bits **actifs à l'état bas** sur les ports 0xDC/0xDD ; l'API
   `Io::setPad` prend elle des bits actifs à 1.
-- Le premier Ko de ROM (0x0000-0x03FF) n'est **jamais paginé** par le mapper.
-- Écrire 0xFFFC-0xFFFF touche **à la fois** le miroir RAM et le mapper.
+- Le premier Ko de ROM (0x0000-0x03FF) n'est **jamais paginé** par le mapper
+  **Sega standard** (Codemasters, lui, pagine tout).
+- Écrire 0xFFFC-0xFFFF touche **à la fois** le miroir RAM et le mapper
+  (Sega seulement — les autres mappers ignorent ces adresses).
 - /INT du VDP est un **niveau** (tenu tant que le drapeau et son enable sont
   actifs) ; le bouton Pause est un **front** NMI.
 - Interfaces publiques des `.hpp` de `src/core/` = contrat : ne changer une

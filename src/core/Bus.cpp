@@ -43,11 +43,13 @@ u8 Bus::read8(u16 addr) {
 }
 
 void Bus::write8(u16 addr, u8 v) {
-    if (addr < 0x8000)
-        return;  // ROM : écriture ignorée
     if (addr < 0xC000) {
+        // Toute écriture sous 0xC000 est relayée au média actif : selon le
+        // mapper, c'est une écriture ROM ignorée, la RAM cartouche, un
+        // registre Codemasters (0x0000/0x4000/0x8000) ou la page coréenne
+        // (0xA000).
         if (Cartridge* m = activeMedium())
-            m->write(addr, v);  // RAM cartouche éventuelle
+            m->write(addr, v);
         return;
     }
     if (!(memControl & 0x10))
