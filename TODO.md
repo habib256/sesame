@@ -70,8 +70,13 @@ et contraintes de licence détaillées là-bas).
       est à adapter
 
 ## Outils
-- [ ] Étalons d'images (comparaison PPM avec tolérance)
-- [ ] ROM de test VDP dédiée (scroll, sprites, IRQ ligne)
+- [x] Étalons d'images — `tools/compare_ppm.py` (tolérance/max-diff,
+      défaut zéro), références commitées dans `tests/refs/` (2026-08)
+- [x] ROM de test VDP dédiée — `tools/make_vdp_rom.py` -> `roms/vdptest.sms`
+      (3 scènes : scroll+colonne masquée, sprites 8x16 overflow/collision,
+      split-screen IRQ ligne ; verdicts SDSC + comparaison aux étalons,
+      intégrée à `run_selftests.py` — 16 checks ; mini-assembleur factorisé
+      dans `tools/smsasm.py`) (2026-08)
 - [ ] [R] Serveur MCP (à la Gearsystem) : exposer registres Z80/VDP,
       mémoire, points d'arrêt et pas-à-pas à des assistants IA via STDIO —
       base naturelle : `sesame-headless` déterministe. Le chantier le plus

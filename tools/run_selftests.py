@@ -11,6 +11,9 @@
 #  2. Lance ./build/sesame-headless dessus (60 trames, capture PPM, SDSC).
 #  3. Vérifie : code retour, sortie SDSC ("SESAME SELFTEST", aucun "FAIL"),
 #     capture PPM 256x192 avec au moins 4 couleurs distinctes, non uniforme.
+#  4. Régénère roms/vdptest.sms (make_vdp_rom.py), vérifie ses verdicts SDSC
+#     (OVF/COL/IRQ) et compare les captures des trois scènes aux images
+#     étalons commitées dans tests/refs/ (tolérance zéro : déterminisme).
 #
 #  Sortie en anglais (convention du projet), code retour global 0/1.
 # =============================================================================
@@ -23,6 +26,15 @@ HEADLESS = ROOT / 'build' / 'sesame-headless'
 ROM = ROOT / 'roms' / 'selftest.sms'
 SCREENSHOT = Path('/tmp/sesame_selftest.ppm')
 FRAMES = 60
+
+VDP_ROM = ROOT / 'roms' / 'vdptest.sms'
+VDP_REFS = ROOT / 'tests' / 'refs'
+# (nom de scène, trame de capture, image étalon)
+VDP_SCENES = [
+    ('scroll',  20, 'vdp_scroll.ppm'),
+    ('sprites', 50, 'vdp_sprites.ppm'),
+    ('irqline', 80, 'vdp_irqline.ppm'),
+]
 
 results = []  # liste de (nom, ok, détail)
 
@@ -126,6 +138,32 @@ def main():
             check('screenshot is not uniform', len(colors) > 1)
         except ValueError as e:
             check('screenshot is a valid PPM', False, str(e))
+
+    # --- 5. ROM de test VDP : verdicts SDSC + étalons d'images ---------------
+    gen = subprocess.run(
+        [sys.executable, str(ROOT / 'tools' / 'make_vdp_rom.py')],
+        capture_output=True, text=True)
+    if check('generate VDP test ROM', gen.returncode == 0,
+             gen.stderr.strip() or gen.stdout.strip()):
+        run = subprocess.run(
+            [str(HEADLESS), str(VDP_ROM), '--frames', '100', '--sdsc'],
+            capture_output=True, text=True, timeout=120, cwd=ROOT)
+        for verdict in ('OVF OK', 'COL OK', 'IRQ OK'):
+            check(f'VDP rom reports "{verdict}"', verdict in run.stdout)
+
+        for name, frame, ref in VDP_SCENES:
+            shot = Path(f'/tmp/sesame_vdp_{name}.ppm')
+            shot.unlink(missing_ok=True)
+            subprocess.run(
+                [str(HEADLESS), str(VDP_ROM), '--frames', str(frame),
+                 '--screenshot', str(shot)],
+                capture_output=True, text=True, timeout=120, cwd=ROOT)
+            cmp_run = subprocess.run(
+                [sys.executable, str(ROOT / 'tools' / 'compare_ppm.py'),
+                 str(VDP_REFS / ref), str(shot)],
+                capture_output=True, text=True)
+            check(f'VDP scene "{name}" matches reference',
+                  cmp_run.returncode == 0, cmp_run.stdout.strip())
 
     # --- Verdict global ------------------------------------------------------
     failed = [name for name, ok, _ in results if not ok]
