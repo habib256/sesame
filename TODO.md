@@ -72,8 +72,10 @@ et contraintes de licence détaillées là-bas).
 - [x] Mode compatibilité SMS-sur-GG (`Model::GameGearSms`, drapeau `--gg`
       des deux frontends : palette SMS, fenêtre LCD 160x144, NMI Pause
       accordé) (2026-08)
-- [ ] Game Gear, suite : shader LCD (rémanence/ghosting de la dalle
-      d'origine)
+- [x] Game Gear, shader LCD : en mode GG la pile d'effets bascule sur un
+      préréglage « dalle » — rémanence marquée (ghosting), grille de pixels
+      (masque à points), ni scanlines ni baril ; `lcd_persistence` et
+      `lcd_grid_strength` dans sesame.cfg (2026-08)
 - [x] Mappers Codemasters (auto-détecté par l'en-tête 0x7FE0, registres
       0x0000/0x4000/0x8000, premier Ko paginé, RAM Ernie Els Golf) et
       coréen (page fenêtre 2 par 0xA000, heuristique gardée par « registres

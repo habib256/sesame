@@ -22,7 +22,7 @@ the GUI; the `Bus` class *is* the memory map.
   (`tools/build_wasm.sh`, then serve `web/`)
 - Game Gear mode (auto-detected from `.gg`): 12-bit palette, 160x144
   cropped display, Start button, per-channel stereo panning, GG-specific
-  ports
+  ports, and an LCD look (pixel grid + ghosting) replacing the CRT filter
 - Sega, Codemasters (auto-detected, incl. Ernie Els RAM) and Korean
   mappers; `.sms`/`.gg` ROM loading (512-byte dumper headers tolerated)
 - Two controllers, Pause (NMI), Reset; Light Phaser emulated with the

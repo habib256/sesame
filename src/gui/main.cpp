@@ -451,6 +451,16 @@ int main(int argc, char** argv)
     // process() renvoie 0 et on retombe sur le rendu brut.
     CrtEffectStack crt;
     crt.setParams(cfg.crtParams);
+    // Préréglage « dalle LCD » pour la Game Gear : la rémanence simule le
+    // ghosting de l'écran d'origine, le masque à points dessine la grille
+    // de pixels ; ni scanlines ni baril (ce n'est pas un tube).
+    CrtParams lcdParams;
+    lcdParams.persistence        = cfg.lcdPersistence;
+    lcdParams.scanlines          = 0.0f;
+    lcdParams.barrel             = 0.0f;
+    lcdParams.shadowMask         = CrtParams::ShadowMask::Dot;
+    lcdParams.shadowMaskStrength = cfg.lcdGridStrength;
+    lcdParams.luminanceGain      = 1.2f;   // compense la grille
     bool crtWasDown = false;
     if (crtOn && !crt.initialize())
         std::fprintf(stderr, "crt: unavailable (%s), raw output\n",
@@ -700,6 +710,7 @@ int main(int argc, char** argv)
         // « verre » rendu à la taille du viewport. En cas d'échec (FBO refusé),
         // process() renvoie 0 et on présente la texture brute.
         GLuint drawTex = tex;
+        crt.setParams(gearGear ? lcdParams : cfg.crtParams);
         if (crtOn && crt.available()) {
             if (const unsigned int out =
                     crt.process(tex, srcW, srcH, vw, vh))

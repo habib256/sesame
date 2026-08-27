@@ -34,6 +34,11 @@ struct Config {
     bool lightPhaser = false;     // light_phaser : souris = pistolet (port A)
     std::string romDir;           // rom_dir : dossier du menu borne, vide = auto
     CrtParams crtParams;          // crt_* (voir save() pour la liste)
+    // Rendu « dalle LCD » appliqué automatiquement en Game Gear à la place
+    // du CRT : rémanence marquée (ghosting de la dalle d'origine) + grille
+    // de pixels (masque à points), sans scanlines ni baril.
+    float lcdPersistence = 0.65f; // lcd_persistence (0..0.98)
+    float lcdGridStrength = 0.35f;// lcd_grid_strength (0..1)
 
     // Chemin du fichier chargé — ou cible de la sauvegarde s'il n'existait
     // pas encore (défaut : ./sesame.cfg).

@@ -93,6 +93,9 @@ bool Config::load(const std::string& p) {
         else if (key == "kiosk_monitor")   kioskMonitor = parseInt(val, kioskMonitor);
         else if (key == "no_sprite_limit") noSpriteLimit = parseBool(val, noSpriteLimit);
         else if (key == "light_phaser")    lightPhaser = parseBool(val, lightPhaser);
+        else if (key == "lcd_persistence") lcdPersistence = parseFloat(val, lcdPersistence);
+        else if (key == "lcd_grid_strength")
+            lcdGridStrength = parseFloat(val, lcdGridStrength);
         else if (key == "rom_dir")         romDir = val;
         else if (key == "crt_brightness")  c.brightness = parseFloat(val, c.brightness);
         else if (key == "crt_contrast")    c.contrast = parseFloat(val, c.contrast);
@@ -161,7 +164,11 @@ bool Config::save() const {
       << "crt_shadow_mask_strength = " << c.shadowMaskStrength << "  # 0..1\n"
       << "crt_luminance_gain = " << c.luminanceGain << "  # 1..2\n"
       << "crt_center_lighting = " << c.centerLighting << " # 0.5..1, 1 = flat\n"
-      << "crt_phosphor_gamma = " << c.phosphorGamma << "  # 0.6..2.6\n";
+      << "crt_phosphor_gamma = " << c.phosphorGamma << "  # 0.6..2.6\n"
+         "\n"
+         "# --- Game Gear LCD look (replaces the CRT filter in GG mode) ---\n"
+      << "lcd_persistence = " << lcdPersistence << "   # 0..0.98 ghosting\n"
+      << "lcd_grid_strength = " << lcdGridStrength << " # 0..1 pixel grid\n";
     return f.good();
 }
 

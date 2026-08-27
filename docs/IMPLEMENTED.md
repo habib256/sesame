@@ -73,6 +73,13 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   GUI) + région export NTSC ; 0x01-0x05 = EXT/série non connectés ;
   0x06 = stéréo PSG (panning par canal appliqué à la sortie)
 - Pas de NMI Pause (`Machine::pressPause` sans effet en Game Gear)
+- Rendu « dalle LCD » au GUI (remplace le CRT en mode GG) : rémanence
+  (ghosting de l'écran d'origine) + grille de pixels (masque à points),
+  sans scanlines ni baril — `lcd_persistence` / `lcd_grid_strength` dans
+  sesame.cfg, touche C pour l'image brute
+- BIOS Game Gear (`bios.gg`, Majesco) auto-détecté pour les `.gg` : les
+  jeux avec l'en-tête « TMR SEGA » bootent ; un homebrew sans en-tête est
+  refusé par le BIOS COMME SUR LE VRAI MATÉRIEL (--no-bios pour le lancer)
 
 ## YM2413 / OPLL (`src/core/Ym2413.cpp`) — unité FM des SMS japonaises
 - Implémentation maison : 9 canaux mélodiques, 2 opérateurs (modulateur ->
