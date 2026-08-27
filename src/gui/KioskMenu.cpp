@@ -32,7 +32,7 @@ namespace {
 const char* kActionResume  = "Resume";
 const char* kActionRestart = "Restart machine";
 const char* kActionQuit    = "Quit";
-constexpr int kActionCount = 4;
+constexpr int kActionCount = 5;
 
 constexpr int kVisibleGames = 14;   // lignes de jeux affichées
 
@@ -62,7 +62,12 @@ bool nameContainsBios(const std::string& n)
 
 void KioskMenu::setRomDir(const std::string& dir)
 {
-    romDir = dir;
+    setRomDirs({dir});
+}
+
+void KioskMenu::setRomDirs(const std::vector<std::string>& dirs)
+{
+    romDirs = dirs;
     scanRoms();
 }
 
@@ -79,17 +84,19 @@ void KioskMenu::open()
 void KioskMenu::scanRoms()
 {
     games.clear();
-    std::error_code ec;
-    for (const auto& e : std::filesystem::directory_iterator(romDir, ec)) {
-        if (!e.is_regular_file(ec)) continue;
-        const std::string fname = e.path().filename().string();
-        // Les images BIOS sont exclues de la liste : insérées comme cartouche
-        // elles afficheraient SOFTWARE ERROR (auto-checksum du BIOS).
-        if (!endsWithSms(fname) || nameContainsBios(fname)) continue;
-        Entry en;
-        en.path = e.path().string();
-        en.name = e.path().stem().string();
-        games.push_back(std::move(en));
+    for (const auto& romDir : romDirs) {
+        std::error_code ec;
+        for (const auto& e : std::filesystem::directory_iterator(romDir, ec)) {
+            if (!e.is_regular_file(ec)) continue;
+            const std::string fname = e.path().filename().string();
+            // Les images BIOS sont exclues de la liste : insérées comme
+            // cartouche elles afficheraient SOFTWARE ERROR (auto-checksum).
+            if (!endsWithSms(fname) || nameContainsBios(fname)) continue;
+            Entry en;
+            en.path = e.path().string();
+            en.name = e.path().stem().string();
+            games.push_back(std::move(en));
+        }
     }
     std::sort(games.begin(), games.end(), [](const Entry& a, const Entry& b) {
         return std::lexicographical_compare(
@@ -151,7 +158,8 @@ KioskMenu::Action KioskMenu::update(const Input& in)
             case 0: out = Action::Resume;           openFlag = false; break;
             case 1: out = Action::Restart;          openFlag = false; break;
             case 2: out = Action::ToggleFullscreen;                   break;
-            case 3: out = Action::Quit;                               break;
+            case 3: out = Action::SwapGamepads;                       break;
+            case 4: out = Action::Quit;                               break;
             }
         }
     }
@@ -215,7 +223,7 @@ void KioskMenu::drawText(float x, float y, float scale, const char* text,
     glEnd();
 }
 
-void KioskMenu::render(int fbW, int fbH, bool fullscreen)
+void KioskMenu::render(int fbW, int fbH, bool fullscreen, bool swapped)
 {
     if (!openFlag) return;
     ensureFont();
@@ -290,7 +298,9 @@ void KioskMenu::render(int fbW, int fbH, bool fullscreen)
              0.3f, 1.0f);
     const char* actions[kActionCount] = {
         kActionResume, kActionRestart,
-        fullscreen ? "Desktop mode" : "Fullscreen", kActionQuit,
+        fullscreen ? "Desktop mode" : "Fullscreen",
+        swapped ? "Gamepads: swapped (2/1)" : "Gamepads: normal (1/2)",
+        kActionQuit,
     };
     for (int i = 0; i < kActionCount; ++i) {
         const bool sel = actionsActive && i == actionSel;

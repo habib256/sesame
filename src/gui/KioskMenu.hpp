@@ -28,6 +28,7 @@ public:
         LoadRom,          // insérer chosenRom() (l'appelant charge + reset)
         Restart,          // reset machine
         ToggleFullscreen, // bureau <-> plein écran
+        SwapGamepads,     // échanger manettes 1 et 2 (l'appelant bascule)
         Quit,             // quitter l'émulateur
     };
 
@@ -38,8 +39,9 @@ public:
         bool fire = false;   // bouton 1 / A / Entrée : valider
     };
 
-    // Dossier scanné pour la liste des jeux (celui de la ROM chargée).
+    // Dossiers scannés pour la liste des jeux (fusionnés puis triés).
     void setRomDir(const std::string& dir);
+    void setRomDirs(const std::vector<std::string>& dirs);
 
     void open();
     void close() { openFlag = false; }
@@ -50,8 +52,9 @@ public:
     const std::string& chosenRom() const { return chosen; }
 
     // Dessine le menu par-dessus la trame courante (projection pixel fbW×fbH).
-    // `fullscreen` choisit le libellé Desktop mode / Fullscreen.
-    void render(int fbW, int fbH, bool fullscreen);
+    // `fullscreen` choisit le libellé Desktop mode / Fullscreen ;
+    // `swapped` reflète l'état courant de l'échange de manettes.
+    void render(int fbW, int fbH, bool fullscreen, bool swapped);
 
 private:
     struct Entry {
@@ -64,7 +67,7 @@ private:
     void drawText(float x, float y, float scale, const char* text,
                   float r, float g, float b, float a);
 
-    std::string romDir;
+    std::vector<std::string> romDirs;
     std::vector<Entry> games;
     std::string chosen;
 

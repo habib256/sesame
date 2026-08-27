@@ -432,7 +432,17 @@ int main(int argc, char** argv)
     // Ouverture : F9 partout ; Start manette et Échap en mode borne.
     KioskMenu menu;
     if (!cfg.romDir.empty()) {
-        menu.setRomDir(cfg.romDir);
+        // rom_dir : un ou plusieurs dossiers séparés par « ; ».
+        std::vector<std::string> dirs;
+        std::string rest = cfg.romDir;
+        while (!rest.empty()) {
+            const auto semi = rest.find(';');
+            const std::string d = rest.substr(0, semi);
+            if (!d.empty()) dirs.push_back(d);
+            if (semi == std::string::npos) break;
+            rest.erase(0, semi + 1);
+        }
+        menu.setRomDirs(dirs);
     } else {
         std::string dir = titlePath ? titlePath : "";
         const std::string::size_type slash = dir.find_last_of("/\\");
@@ -550,8 +560,11 @@ int main(int argc, char** argv)
         // slot 2 -> pad 2.
         bool startDown = false, selectDown = false;
         const u8 kbMask = readPadMask(win);
-        const u8 gp0 = readGamepadMask(GLFW_JOYSTICK_1, &startDown, &selectDown);
-        const u8 gp1 = readGamepadMask(GLFW_JOYSTICK_2, &startDown, &selectDown);
+        const u8 gpA = readGamepadMask(GLFW_JOYSTICK_1, &startDown, &selectDown);
+        const u8 gpB = readGamepadMask(GLFW_JOYSTICK_2, &startDown, &selectDown);
+        // swap_gamepads (config + menu) : échange les slots physiques 1/2.
+        const u8 gp0 = cfg.swapGamepads ? gpB : gpA;
+        const u8 gp1 = cfg.swapGamepads ? gpA : gpB;
         const bool enterDown = glfwGetKey(win, GLFW_KEY_ENTER) == GLFW_PRESS;
 
         // Ouverture/fermeture du menu borne : Start manette ou F9, partout ;
@@ -609,6 +622,9 @@ int main(int argc, char** argv)
                 break;
             case KioskMenu::Action::ToggleFullscreen:
                 toggleFullscreen();
+                break;
+            case KioskMenu::Action::SwapGamepads:
+                cfg.swapGamepads = !cfg.swapGamepads;   // persisté à la sortie
                 break;
             case KioskMenu::Action::Quit:
                 glfwSetWindowShouldClose(win, GLFW_TRUE);
@@ -778,7 +794,7 @@ int main(int argc, char** argv)
         glDisable(GL_TEXTURE_2D);
 
         // Menu borne par-dessus le jeu figé (net, hors passe CRT).
-        menu.render(fbW, fbH, fullscreen);
+        menu.render(fbW, fbH, fullscreen, cfg.swapGamepads);
 
         // --shot-at : relit le framebuffer GL (bas vers haut) et écrit un PPM.
         // Compte les trames AFFICHÉES (pas émulées) : la capture fonctionne

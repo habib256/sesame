@@ -94,8 +94,10 @@ et contraintes de licence détaillées là-bas).
 - [x] Mode kiosk (--kiosk [--kiosk-monitor N] : plein écran exclusif,
       curseur masqué, CRT activé, 2026-08) + menu in-game (Start/F9 :
       liste de jeux, restart, desktop, quit — 2026-08)
-- [ ] Menu kiosk : dossiers ROM additionnels + affectation des manettes
-      (parité NeoST)
+- [x] Menu kiosk, parité NeoST : dossiers ROM multiples (`rom_dir` liste
+      « ; » dans sesame.cfg, fusionnés/triés) + échange des manettes 1/2
+      (action du menu « Gamepads: normal/swapped », clé `swap_gamepads`
+      persistée) (2026-08)
 - [x] Fichier de configuration `sesame.cfg` : chargé au lancement
       (--config FILE, ./sesame.cfg ou à côté de l'exécutable), CLI
       prioritaire, état effectif RÉÉCRIT à la sortie propre (les réglages

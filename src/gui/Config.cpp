@@ -73,8 +73,9 @@ bool Config::load(const std::string& p) {
 
     std::string line;
     while (std::getline(f, line)) {
-        // Commentaires (# et ;) et lignes vides.
-        const auto hash = line.find_first_of("#;");
+        // Commentaires (#) et lignes vides. (Pas « ; » : c'est le
+        // séparateur de liste de rom_dir.)
+        const auto hash = line.find('#');
         if (hash != std::string::npos) line.resize(hash);
         line = trim(line);
         if (line.empty()) continue;
@@ -99,6 +100,7 @@ bool Config::load(const std::string& p) {
         else if (key == "lcd_grid_strength")
             lcdGridStrength = parseFloat(val, lcdGridStrength);
         else if (key == "rom_dir")         romDir = val;
+        else if (key == "swap_gamepads")   swapGamepads = parseBool(val, swapGamepads);
         else if (key == "crt_brightness")  c.brightness = parseFloat(val, c.brightness);
         else if (key == "crt_contrast")    c.contrast = parseFloat(val, c.contrast);
         else if (key == "crt_saturation")  c.saturation = parseFloat(val, c.saturation);
@@ -153,8 +155,11 @@ bool Config::save() const {
       << "#         about 5.5 MB of RAM per second)\n"
       << "rewind = " << (rewind ? "true" : "false") << "\n"
       << "rewind_seconds = " << rewindSeconds << "\n"
-      << "# rom_dir: game list folder for the in-game menu (empty = auto)\n"
+      << "# rom_dir: game list folders for the in-game menu, ';' separated\n"
+      << "#          (empty = the loaded ROM's folder)\n"
       << "rom_dir = " << romDir << "\n"
+      << "# swap_gamepads: exchange gamepad slots 1 and 2 (also in the menu)\n"
+      << "swap_gamepads = " << (swapGamepads ? "true" : "false") << "\n"
          "\n"
          "# --- CRT filter ---\n"
       << "crt_brightness = " << c.brightness << "      # -0.5..0.5\n"
