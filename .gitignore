@@ -3,6 +3,8 @@ build/
 # (généré par tools/make_test_rom.py) et zexdoc/zexall (GPL, récupérées
 # par tools/fetch_zexall.py).
 roms/
+# Idem pour les images BIOS (copyright Sega) : jamais dans le dépôt.
+bios/
 *.ppm
 *.wav
 *.sav

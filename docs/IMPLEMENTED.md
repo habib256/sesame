@@ -134,11 +134,14 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   démarrage SANS ROM accepté (`sesame --kiosk` depuis le dossier des jeux :
   BIOS auto-détecté dans le dossier courant, menu borne ouvert au
   lancement) ;
-  BIOS auto-détecté au lancement : sans `--bios`, une image `.sms` dont le
-  nom contient « BIOS » dans le dossier de la ROM est chargée dans le slot
-  BIOS (première par ordre alphabétique ; `--no-bios` désactive ; jamais
-  pour les modèles Game Gear) — la console démarre sur son BIOS qui boote
-  ensuite la cartouche, comme le vrai matériel ;
+  BIOS auto-détecté au lancement : sans `--bios`, une image dont le nom
+  contient « BIOS » est cherchée dans `<dossier ROM>/bios`, le dossier de
+  la ROM, `./bios`, `.`, puis `bios/` à côté de l'exécutable et un cran
+  au-dessus (lancement depuis `build/`) — extension selon le matériel
+  (.sms pour SMS, .gg pour Game Gear), première par ordre alphabétique ;
+  `--no-bios` désactive, pas de BIOS pour les .sg. La console démarre sur
+  son BIOS, qui boote ensuite la cartouche, comme le vrai matériel
+  (validé avec le BIOS SMS2 réel : logo SEGA puis boot du jeu) ;
   filtre CRT en une passe FBO (`src/gui/CrtEffectStack.cpp`, porté de
   NeoST/POM2 : baril, scanlines, shadow mask, vignette, persistance
   phosphore ; GLSL 120→150 avec repli, no-op sûr si le pilote refuse) —

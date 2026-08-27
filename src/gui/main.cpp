@@ -62,6 +62,31 @@ bool looksLikeBios(const char* path)
 }
 
 // -----------------------------------------------------------------------------
+//  Cherche une image BIOS (nom contenant « BIOS », extension voulue) dans
+//  les répertoires candidats, dans l'ordre ; à l'intérieur d'un répertoire,
+//  choix stable : premier nom par ordre alphabétique. Chaîne vide si rien.
+// -----------------------------------------------------------------------------
+std::string findBiosImage(const std::vector<std::string>& dirs,
+                          const std::string& wantExt)
+{
+    for (const auto& dir : dirs) {
+        std::string best;
+        std::error_code ec;
+        for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
+            if (!e.is_regular_file(ec)) continue;
+            const std::string name = e.path().filename().string();
+            std::string ext = e.path().extension().string();
+            for (char& c : ext) c = (char)std::tolower((unsigned char)c);
+            if (ext != wantExt || !looksLikeBios(name.c_str())) continue;
+            const std::string p = e.path().string();
+            if (best.empty() || p < best) best = p;
+        }
+        if (!best.empty()) return best;
+    }
+    return {};
+}
+
+// -----------------------------------------------------------------------------
 //  Lecture du clavier -> masque de boutons de la manette 1.
 //  Flèches = directions, Z ou W = bouton 1 (couvre QWERTY et AZERTY), X = 2.
 // -----------------------------------------------------------------------------
@@ -214,36 +239,39 @@ int main(int argc, char** argv)
         romPath  = nullptr;
     }
 
-    // Pas de --bios ? On cherche une image BIOS dans le dossier de la ROM
-    // (nom contenant « BIOS », extension .sms) — comme une vraie console,
-    // qui démarre toujours sur son BIOS. --no-bios s'en passe. Le BIOS
-    // détecte et boote ensuite la cartouche lui-même (contrôle mémoire
-    // 0x3E réel). Modèles Game Gear : pas de BIOS SMS.
+    // Pas de --bios ? On cherche une image BIOS — comme une vraie console,
+    // qui démarre toujours sur son BIOS ; il détecte et boote ensuite la
+    // cartouche lui-même (contrôle mémoire 0x3E réel). Répertoires
+    // candidats, dans l'ordre : <dossier ROM>/bios, <dossier ROM>, ./bios,
+    // ., puis <dossier exécutable>/bios et .../../bios (couvre le
+    // lancement depuis build/). Extension selon le matériel : .sms pour la
+    // SMS, .gg pour la Game Gear (bios.gg). --no-bios s'en passe ;
+    // SG-1000 (.sg) : pas de BIOS.
     std::string autoBios;
     std::string romExt = romPath ? romPath : "";
     if (auto d = romExt.rfind('.'); d != std::string::npos)
         romExt = romExt.substr(d);
     for (char& c : romExt) c = (char)std::tolower((unsigned char)c);
-    if (!biosPath && !noBios && !forceGg &&
-        (!romPath || romExt == ".sms")) {
-        std::string dir = ".";
+    if (!biosPath && !noBios && romExt != ".sg") {
+        const bool ggHardware = forceGg || romExt == ".gg";
+        std::vector<std::string> dirs;
         if (romPath) {
-            dir = romPath;
+            std::string dir = romPath;
             const auto slash = dir.find_last_of("/\\");
             dir = (slash == std::string::npos) ? "." : dir.substr(0, slash);
+            dirs.push_back(dir + "/bios");
+            dirs.push_back(dir);
         }
-        std::error_code ec;
-        for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
-            if (!e.is_regular_file(ec)) continue;
-            const std::string name = e.path().filename().string();
-            std::string ext = e.path().extension().string();
-            for (char& c : ext) c = (char)std::tolower((unsigned char)c);
-            if (ext != ".sms" || !looksLikeBios(name.c_str())) continue;
-            const std::string p = e.path().string();
-            // Choix stable : le premier par ordre alphabétique.
-            if (autoBios.empty() || p < autoBios)
-                autoBios = p;
+        dirs.push_back("bios");
+        dirs.push_back(".");
+        std::string exe = argv[0];
+        if (const auto slash = exe.find_last_of("/\\");
+            slash != std::string::npos) {
+            exe.resize(slash);
+            dirs.push_back(exe + "/bios");
+            dirs.push_back(exe + "/../bios");
         }
+        autoBios = findBiosImage(dirs, ggHardware ? ".gg" : ".sms");
         if (!autoBios.empty()) {
             biosPath = autoBios.c_str();
             std::fprintf(stderr, "bios: auto-detected %s\n", biosPath);
