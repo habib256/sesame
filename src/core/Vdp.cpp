@@ -89,6 +89,9 @@ void Vdp::reset() {
     for (u32& p : fb) p = kBlack;
 
     curLine = 0;
+    beamX = 0;
+    sprLineReady = false;
+    lineScrollX = 0;
     cramLatch = 0;
     cramTouched = false;
     addr = 0;
@@ -264,6 +267,19 @@ bool Vdp::frameDone() {
 // -----------------------------------------------------------------------------
 //  Avancement d'une ligne (appelé par Machine toutes les 228 cycles CPU)
 // -----------------------------------------------------------------------------
+// Rattrapage du faisceau : rend la ligne courante jusqu'à la position CPU.
+// Seul le mode 4 est rendu par tranches (les modes TMS restent en ligne
+// entière — aucun jeu SG-1000 connu ne fait d'effet mid-line).
+void Vdp::catchUp(int cycleInLine) {
+    if (curLine >= height() || (regs[0] & 0x04) == 0)
+        return;
+    int target = cycleInLine * 342 / 228;   // horloge pixel = 1,5x CPU
+    if (target > kWidth) target = kWidth;
+    if (target <= beamX) return;
+    renderSpan(curLine, beamX, target);
+    beamX = target;
+}
+
 void Vdp::runLine() {
     const int h = height();   // 192, 224 ou 240 selon le mode courant
 
@@ -271,8 +287,17 @@ void Vdp::runLine() {
     // après la zone visible — voir en-tête.
     if (curLine == h) status |= 0x80;
 
-    // Rendu des lignes visibles uniquement.
-    if (curLine < h) renderLine(curLine);
+    // Rendu des lignes visibles uniquement : fin de la ligne en cours
+    // (mode 4, le début a pu être rendu par catchUp), ou ligne entière
+    // (modes TMS hérités).
+    if (curLine < h) {
+        if ((regs[0] & 0x04) == 0)
+            renderLineTms(curLine);
+        else if (beamX < kWidth)
+            renderSpan(curLine, beamX, kWidth);
+    }
+    beamX = 0;
+    sprLineReady = false;
 
     // Compteur d'interruption de ligne (registre 10) :
     //  - zone active (+1) : décrément ; passage sous zéro -> rechargement
@@ -297,94 +322,23 @@ void Vdp::runLine() {
 }
 
 // -----------------------------------------------------------------------------
-//  Rendu d'une ligne en mode 4
+//  Sprites d'une ligne (mode 4). Évalués UNE fois par ligne : sur le vrai
+//  VDP, la SAT est lue pendant le hblank précédent — les sprites ne peuvent
+//  pas changer en pleine ligne. Le résultat est un index de couleur par
+//  pixel (0 = pas de sprite ; bit 7 = pixel posé, pour la priorité
+//  inter-sprites), résolu en RGBA au moment du composite (renderSpan) pour
+//  que les écritures CRAM mid-line teintent aussi les sprites.
 // -----------------------------------------------------------------------------
-void Vdp::renderLine(int y) {
-    u32* dst = fb + y * kWidth;
+void Vdp::prepareSpriteLine(int y) {
+    for (int x = 0; x < kWidth; ++x) sprColor[x] = 0;
+    sprLineReady = true;
 
-    // Bit M4 (reg0 bit 2) à zéro : modes hérités TMS9918 (SG-1000, F-16).
-    if ((regs[0] & 0x04) == 0) {
-        renderLineTms(y);
-        return;
-    }
-
-    // Couleur de bord : entrée (reg7 & 0xF) de la palette SPRITE (CRAM 16-31).
-    const u32 border = colorAt(16 + (regs[7] & 0x0F));
-
-    // Affichage coupé (reg1 bit 6 = 0) : ligne entière à la couleur de bord.
-    if ((regs[1] & 0x40) == 0) {
-        for (int x = 0; x < kWidth; ++x) dst[x] = border;
-        return;
-    }
-
-    // ---------------------------------------------------------------- Fond ---
-    // Table de noms — 192 lignes : ((reg2 >> 1) & 7) << 11, 32×28 entrées ;
-    // 224/240 lignes : (((reg2 >> 2) & 3) << 12) | 0x700, 32×32 entrées et
-    // le défilement vertical boucle sur 256 au lieu de 224.
-    const int  h        = height();
-    const bool tall     = (h != kHeight);
-    const int  nameBase = tall ? ((((regs[2] >> 2) & 0x03) << 12) | 0x700)
-                               : (((regs[2] >> 1) & 0x07) << 11);
-
-    // reg8 = scroll X (fond décalé vers la DROITE de scrollX pixels).
-    // Verrou reg0 bit 6 : pas de scroll horizontal pour les lignes 0-15.
-    int scrollX = regs[8];
-    if ((regs[0] & 0x40) != 0 && y < 16) scrollX = 0;
-    const int scrollY = regs[9];
-
-    u8   bgIndex[kWidth];   // index de couleur 0-15 du pixel de fond
-    bool bgPrio[kWidth];    // bit priorité de la tuile sous ce pixel
-
-    for (int x = 0; x < kWidth; ++x) {
-        // Pixel du plan de fond : décalage de scrollX vers la droite
-        // (équivalent au couple fine scroll / starting column de la doc).
-        const int bx = (x - scrollX) & 0xFF;
-
-        // reg9 = scroll Y, ajouté à la ligne modulo 224 (28 rangées de
-        // tuiles) en 192 lignes, modulo 256 (32 rangées) en 224/240.
-        // Verrou reg0 bit 7 : pas de scroll vertical pour les colonnes
-        // d'ÉCRAN 24-31 (x >= 192).
-        int vy;
-        if ((regs[0] & 0x80) != 0 && x >= 192) vy = y;
-        else if (tall)                         vy = (y + scrollY) & 0xFF;
-        else                                   vy = (y + scrollY) % 224;
-
-        // Entrée de table de noms : bits 8-0 tuile, 9 flip H, 10 flip V,
-        // 11 palette, 12 priorité.
-        const int ea = nameBase + ((vy >> 3) * 32 + (bx >> 3)) * 2;
-        const u16 entry = static_cast<u16>(vram[ea] | (vram[ea + 1] << 8));
-
-        const int  tile  = entry & 0x01FF;
-        const bool hflip = (entry & 0x0200) != 0;
-        const bool vflip = (entry & 0x0400) != 0;
-        const int  pal   = (entry & 0x0800) ? 16 : 0;   // 0 = fond, 1 = sprite
-        bgPrio[x]        = (entry & 0x1000) != 0;
-
-        // Tuiles 8×8, 4 bitplanes entrelacés par ligne, 32 octets/tuile.
-        int fy = vy & 7;
-        if (vflip) fy = 7 - fy;
-        int bit = 7 - (bx & 7);          // bit 7 = pixel le plus à gauche
-        if (hflip) bit = bx & 7;
-
-        const int pa = tile * 32 + fy * 4;
-        const int ci = ((vram[pa]     >> bit) & 1)
-                     | (((vram[pa + 1] >> bit) & 1) << 1)
-                     | (((vram[pa + 2] >> bit) & 1) << 2)
-                     | (((vram[pa + 3] >> bit) & 1) << 3);
-
-        bgIndex[x] = static_cast<u8>(ci);
-        dst[x] = colorAt(pal + ci);
-    }
-
-    // ------------------------------------------------------------- Sprites ---
-    // Table d'attributs : ((reg5 >> 1) & 0x3F) << 8. Octets 0-63 = Y ;
-    // octets 128+ = paires (X, index de tuile).
+    const bool tall   = (height() != kHeight);
     const int satBase = ((regs[5] >> 1) & 0x3F) << 8;
     const int sprH    = (regs[1] & 0x02) ? 16 : 8;      // reg1 bit 1 : 8×16
     const int patBase = (regs[6] & 0x04) ? 0x2000 : 0;  // reg6 bit 2 : base motifs
     const int xShift  = (regs[0] & 0x08) ? -8 : 0;      // reg0 bit 3 : early clock
 
-    bool sprOpaque[kWidth] = {};   // pixel de sprite déjà posé (collision + priorité inter-sprites)
     int shown = 0;
 
     for (int i = 0; i < 64; ++i) {
@@ -425,27 +379,101 @@ void Vdp::renderLine(int y) {
             const int sx = sx0 + px;
             if (sx < 0 || sx >= kWidth) continue;
 
-            if (sprOpaque[sx]) {
+            if (sprColor[sx] & 0x80) {
                 // Deux pixels opaques de sprites se recouvrent : collision.
                 // Le sprite de numéro le plus bas (déjà posé) garde le pixel.
                 status |= 0x20;
                 continue;
             }
-            sprOpaque[sx] = true;
-
-            // Un pixel de fond prioritaire et non nul passe DEVANT le sprite
-            // (mais la collision ci-dessus est détectée quand même).
-            if (bgPrio[sx] && bgIndex[sx] != 0) continue;
-
-            // Les sprites utilisent TOUJOURS la palette 1 (CRAM 16-31).
-            dst[sx] = colorAt(16 + ci);
+            sprColor[sx] = static_cast<u8>(0x80 | ci);
         }
     }
+}
 
-    // reg0 bit 5 : masquage de la colonne de gauche (8 pixels) avec la
-    // couleur de bord — appliqué en dernier, par-dessus fond et sprites.
-    if ((regs[0] & 0x20) != 0) {
-        for (int x = 0; x < 8; ++x) dst[x] = border;
+// -----------------------------------------------------------------------------
+//  Rendu d'une tranche [x0, x1) de la ligne y en mode 4. Les registres et la
+//  CRAM sont lus à l'appel : deux tranches d'une même ligne peuvent donc
+//  différer (effets mid-line). Le scroll X, lui, est LATCHÉ en début de
+//  ligne comme sur le matériel.
+// -----------------------------------------------------------------------------
+void Vdp::renderSpan(int y, int x0, int x1) {
+    u32* dst = fb + y * kWidth;
+
+    // Couleur de bord : entrée (reg7 & 0xF) de la palette SPRITE (CRAM 16-31).
+    const u32 border = colorAt(16 + (regs[7] & 0x0F));
+
+    // Affichage coupé (reg1 bit 6 = 0) : tranche à la couleur de bord.
+    if ((regs[1] & 0x40) == 0) {
+        for (int x = x0; x < x1; ++x) dst[x] = border;
+        return;
+    }
+
+    // Début de ligne : latch du scroll X (verrou reg0 bit 6 : pas de
+    // défilement horizontal pour les lignes 0-15) et sprites de la ligne.
+    if (x0 == 0) {
+        lineScrollX = regs[8];
+        if ((regs[0] & 0x40) != 0 && y < 16) lineScrollX = 0;
+    }
+    if (!sprLineReady)
+        prepareSpriteLine(y);
+
+    // Table de noms — 192 lignes : ((reg2 >> 1) & 7) << 11, 32×28 entrées ;
+    // 224/240 lignes : (((reg2 >> 2) & 3) << 12) | 0x700, 32×32 entrées et
+    // le défilement vertical boucle sur 256 au lieu de 224.
+    const bool tall     = (height() != kHeight);
+    const int  nameBase = tall ? ((((regs[2] >> 2) & 0x03) << 12) | 0x700)
+                               : (((regs[2] >> 1) & 0x07) << 11);
+    const int  scrollY  = regs[9];
+
+    for (int x = x0; x < x1; ++x) {
+        // Pixel du plan de fond : décalage de scrollX vers la droite
+        // (équivalent au couple fine scroll / starting column de la doc).
+        const int bx = (x - lineScrollX) & 0xFF;
+
+        // reg9 = scroll Y, ajouté à la ligne modulo 224 (28 rangées de
+        // tuiles) en 192 lignes, modulo 256 (32 rangées) en 224/240.
+        // Verrou reg0 bit 7 : pas de scroll vertical pour les colonnes
+        // d'ÉCRAN 24-31 (x >= 192).
+        int vy;
+        if ((regs[0] & 0x80) != 0 && x >= 192) vy = y;
+        else if (tall)                         vy = (y + scrollY) & 0xFF;
+        else                                   vy = (y + scrollY) % 224;
+
+        // Entrée de table de noms : bits 8-0 tuile, 9 flip H, 10 flip V,
+        // 11 palette, 12 priorité.
+        const int ea = nameBase + ((vy >> 3) * 32 + (bx >> 3)) * 2;
+        const u16 entry = static_cast<u16>(vram[ea] | (vram[ea + 1] << 8));
+
+        const int  tile  = entry & 0x01FF;
+        const bool hflip = (entry & 0x0200) != 0;
+        const bool vflip = (entry & 0x0400) != 0;
+        const int  pal   = (entry & 0x0800) ? 16 : 0;   // 0 = fond, 1 = sprite
+        const bool prio  = (entry & 0x1000) != 0;
+
+        // Tuiles 8×8, 4 bitplanes entrelacés par ligne, 32 octets/tuile.
+        int fy = vy & 7;
+        if (vflip) fy = 7 - fy;
+        int bit = 7 - (bx & 7);          // bit 7 = pixel le plus à gauche
+        if (hflip) bit = bx & 7;
+
+        const int pa = tile * 32 + fy * 4;
+        const int ci = ((vram[pa]     >> bit) & 1)
+                     | (((vram[pa + 1] >> bit) & 1) << 1)
+                     | (((vram[pa + 2] >> bit) & 1) << 2)
+                     | (((vram[pa + 3] >> bit) & 1) << 3);
+
+        // Composite : un pixel de sprite passe devant le fond, SAUF fond
+        // prioritaire et non nul. Les sprites utilisent TOUJOURS la
+        // palette 1 (CRAM 16-31).
+        const int sc = sprColor[x] & 0x0F;
+        if (sc != 0 && !(prio && ci != 0))
+            dst[x] = colorAt(16 + sc);
+        else
+            dst[x] = colorAt(pal + ci);
+
+        // reg0 bit 5 : colonne de gauche (8 pixels) masquée par le bord.
+        if (x < 8 && (regs[0] & 0x20) != 0)
+            dst[x] = border;
     }
 }
 
@@ -634,4 +662,9 @@ void Vdp::serialize(StateIO& s) {
     s.boolv(lineIrq);
     s.boolv(frameDoneFlag);
     s.u8v(hLatch);
+    if (s.loading()) {
+        // États pris en frontière de trame : faisceau au repos.
+        beamX = 0;
+        sprLineReady = false;
+    }
 }

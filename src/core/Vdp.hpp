@@ -80,6 +80,14 @@ public:
     // Rend la ligne courante (si visible), met à jour compteurs de ligne,
     // drapeaux d'interruption et VBlank, puis passe à la ligne suivante.
     void runLine();
+
+    // TIMING INTRA-LIGNE : rattrape le rendu de la ligne courante jusqu'à
+    // la position du faisceau (cycleInLine, 0..227). Appelé par le Bus
+    // AVANT toute écriture VDP : les effets en pleine ligne (CRAM mid-line,
+    // changements de registres) apparaissent au bon pixel. Approximation
+    // documentée : cycle 0 = premier pixel actif de la ligne, précision à
+    // l'instruction près.
+    void catchUp(int cycleInLine);
     // Niveau de la ligne /INT vers le CPU (VBlank et/ou interruption de ligne,
     // selon les bits d'activation des registres 0 et 1).
     bool irqPending() const;
@@ -123,7 +131,15 @@ private:
 
     u32  colorAt(int index) const;  // entrée CRAM 0-31 -> RGBA selon modèle
     u32  tmsColor(int c) const;     // couleur 1-15 des modes hérités
-    void renderLine(int y);
+    void renderSpan(int y, int x0, int x1);  // mode 4, tranche [x0, x1)
+    void prepareSpriteLine(int y);  // sprites de la ligne (SAT figée en hblank)
     void renderLineTms(int y);      // modes hérités TMS9918 (M4 = 0)
     void renderTmsSprites(int y, u32* dst);
+
+    // Rendu par tranches (timing intra-ligne) — non sérialisé : les
+    // save-states sont pris en frontière de trame, faisceau au repos.
+    int beamX = 0;            // pixels déjà rendus sur la ligne courante
+    int lineScrollX = 0;      // scroll X latché en début de ligne (matériel)
+    u8  sprColor[kWidth]{};   // index de couleur sprite de la ligne (0 = rien)
+    bool sprLineReady = false;
 };

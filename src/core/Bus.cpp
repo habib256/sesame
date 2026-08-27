@@ -110,6 +110,10 @@ void Bus::ioWrite(u8 port, u8 v) {
         psg->write(v);
         return;
     case 0x80:
+        // Timing intra-ligne : la ligne en cours est rendue jusqu'à la
+        // position du faisceau AVANT d'appliquer l'écriture — les effets
+        // mid-line (CRAM, registres) tombent au bon pixel.
+        vdp->catchUp(lineCycles);
         if (port & 1) vdp->writeControl(v);
         else          vdp->writeData(v);
         return;

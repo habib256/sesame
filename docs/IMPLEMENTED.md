@@ -20,6 +20,10 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   terminateur de sprites 0xD0 inactif, séquences VCounter propres à chaque
   mode et norme
 - Défilement X/Y + verrous (reg0 bits 6/7), colonne gauche masquable
+- TIMING INTRA-LIGNE (mode 4) : rendu par tranches avec rattrapage de
+  faisceau avant chaque écriture VDP — CRAM mid-line au pixel près
+  (précision : l'instruction), scroll X latché en début de ligne, sprites
+  évalués une fois par ligne (SAT figée au hblank comme sur la puce)
 - Sprites 8×8 et 8×16, limite 8/ligne (overflow), collision, early clock ;
   comparaison Y en 8 bits (un sprite à Y >= 0xF1 déborde en haut de l'écran)
 - Interruptions VBlank et ligne (reg 10), /INT en niveau

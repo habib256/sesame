@@ -30,7 +30,13 @@ et contraintes de licence détaillées là-bas).
       sprite (comportement 315-5124) avec repli palette TMS fixe tant que
       la CRAM n'a pas été écrite (jeux SG-1000) ; `.sg` accepté partout ;
       ROM de test `tmstest.sg` + étalon (27 checks), état v4 (2026-08)
-- [ ] Timing fin intra-ligne (mid-line scroll/CRAM effects)
+- [x] Timing fin intra-ligne — rendu du mode 4 par TRANCHES avec
+      rattrapage de faisceau (le Bus rend la ligne jusqu'à la position CPU
+      avant toute écriture VDP) : effets CRAM mid-line au pixel près,
+      scroll X latché en début de ligne (matériel), sprites évalués une
+      fois par ligne (SAT lue au hblank). Étalon irqline régénéré (le
+      split est plus fidèle d'une ligne). Modes TMS : ligne entière
+      (aucun jeu connu n'en a besoin) (2026-08)
 - [x] [R] Option « no sprite limit » (mode 4 : 8/ligne ; TMS : 4/ligne ;
       les drapeaux overflow/5S restent levés) — `no_sprite_limit` dans
       sesame.cfg, `--no-sprite-limit` au headless (2026-08)
