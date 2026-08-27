@@ -59,6 +59,9 @@ void Bus::write8(u16 addr, u8 v) {
 u8 Bus::ioRead(u8 port) {
     switch (port & 0xC0) {
     case 0x00:
+        // Game Gear : ports dédiés 0x00-0x06 (Start/région, EXT, série).
+        if (model == Model::GameGear && port <= 0x06)
+            return io->readGgPort(port);
         // SMS2 : lecture non fiable ; on retourne 0xFF (bus flottant).
         return 0xFF;
     case 0x40:
@@ -73,6 +76,13 @@ u8 Bus::ioRead(u8 port) {
 void Bus::ioWrite(u8 port, u8 v) {
     switch (port & 0xC0) {
     case 0x00:
+        if (model == Model::GameGear && port <= 0x06) {
+            // 0x06 : stéréo PSG ; 0x00-0x05 : Start/EXT/série, écritures
+            // sans effet (0x00 est en lecture seule, le lien série n'est
+            // pas émulé).
+            if (port == 0x06) psg->writeStereo(v);
+            return;
+        }
         if (port & 1) io->writeIoControl(v);
         else          memControl = v;  // 0x3E : sélection des médias
         return;

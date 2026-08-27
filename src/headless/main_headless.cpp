@@ -26,7 +26,7 @@ namespace {
 void printUsage(FILE* out)
 {
     std::fprintf(out,
-        "usage: sesame-headless <rom.sms> [options]\n"
+        "usage: sesame-headless <rom.sms|rom.gg> [options]\n"
         "\n"
         "options:\n"
         "  --bios FILE           load FILE into the BIOS slot (boots before the\n"
@@ -51,24 +51,32 @@ void printUsage(FILE* out)
 // -----------------------------------------------------------------------------
 //  Écrit le framebuffer RGBA du VDP dans un PPM binaire (P6).
 //  Chaque pixel est un u32 little-endian : R = v & 0xFF, puis G, puis B.
+//  En Game Gear, seule la fenêtre visible 160×144 (centrée) est écrite.
 // -----------------------------------------------------------------------------
-bool writePpm(const char* path, const u32* fb)
+bool writePpm(const char* path, const u32* fb, Model model)
 {
     FILE* f = std::fopen(path, "wb");
     if (!f) {
         std::fprintf(stderr, "error: cannot open '%s' for writing\n", path);
         return false;
     }
-    std::fprintf(f, "P6\n%d %d\n255\n", Vdp::kWidth, Vdp::kHeight);
+    const bool gg = (model == Model::GameGear);
+    const int w  = gg ? Vdp::kGgWidth   : Vdp::kWidth;
+    const int h  = gg ? Vdp::kGgHeight  : Vdp::kHeight;
+    const int x0 = gg ? Vdp::kGgOffsetX : 0;
+    const int y0 = gg ? Vdp::kGgOffsetY : 0;
+    std::fprintf(f, "P6\n%d %d\n255\n", w, h);
     // Conversion RGBA -> RGB, un pixel à la fois (simple et déterministe).
-    for (int i = 0; i < Vdp::kWidth * Vdp::kHeight; ++i) {
-        const u32 v = fb[i];
-        const unsigned char rgb[3] = {
-            static_cast<unsigned char>(v & 0xFF),
-            static_cast<unsigned char>((v >> 8) & 0xFF),
-            static_cast<unsigned char>((v >> 16) & 0xFF),
-        };
-        std::fwrite(rgb, 1, 3, f);
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const u32 v = fb[(y0 + y) * Vdp::kWidth + x0 + x];
+            const unsigned char rgb[3] = {
+                static_cast<unsigned char>(v & 0xFF),
+                static_cast<unsigned char>((v >> 8) & 0xFF),
+                static_cast<unsigned char>((v >> 16) & 0xFF),
+            };
+            std::fwrite(rgb, 1, 3, f);
+        }
     }
     std::fclose(f);
     return true;
@@ -296,8 +304,12 @@ int main(int argc, char** argv)
         }
         std::fprintf(stderr, "rom: %s (%ld bytes)\n", romPath, fileSize(romPath));
     }
-    std::fprintf(stderr, "video: %dx%d @ %s\n", Vdp::kWidth, Vdp::kHeight,
-                 pal ? "50 Hz PAL" : "60 Hz NTSC");
+    const bool gg = (machine.model() == Model::GameGear);
+    std::fprintf(stderr, "video: %dx%d @ %s%s\n",
+                 gg ? Vdp::kGgWidth : Vdp::kWidth,
+                 gg ? Vdp::kGgHeight : Vdp::kHeight,
+                 pal ? "50 Hz PAL" : "60 Hz NTSC",
+                 gg ? " (Game Gear)" : "");
 
     machine.io.sdscEnabled = sdsc;
 
@@ -365,7 +377,7 @@ int main(int argc, char** argv)
         if (shotPrefix && ((f + 1) % shotEvery) == 0) {
             char name[1024];
             std::snprintf(name, sizeof(name), "%s%04ld.ppm", shotPrefix, f + 1);
-            if (!writePpm(name, machine.vdp.frameBuffer())) {
+            if (!writePpm(name, machine.vdp.frameBuffer(), machine.model())) {
                 if (traceFile) std::fclose(traceFile);
                 if (wavFile) std::fclose(wavFile);
                 return 1;
@@ -375,7 +387,8 @@ int main(int argc, char** argv)
 
     // --- Sorties finales -----------------------------------------------------
     if (screenshotPath) {
-        if (!writePpm(screenshotPath, machine.vdp.frameBuffer())) {
+        if (!writePpm(screenshotPath, machine.vdp.frameBuffer(),
+                      machine.model())) {
             if (traceFile) std::fclose(traceFile);
             if (wavFile) std::fclose(wavFile);
             return 1;

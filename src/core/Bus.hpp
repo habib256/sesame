@@ -19,6 +19,8 @@
 //    0x40-0x7F : lecture pair -> VCounter, impair -> HCounter ; écriture -> PSG
 //    0x80-0xBF : pair -> VDP données, impair -> VDP contrôle
 //    0xC0-0xFF : lecture pair -> 0xDC, impair -> 0xDD ; 0xFC/0xFD -> SDSC
+//  En Game Gear, les ports 0x00-0x06 sont soustraits à la règle pair/impair :
+//  0x00 Start/région, 0x01-0x05 EXT/série, 0x06 stéréo PSG.
 // =============================================================================
 #include "Types.hpp"
 
@@ -31,6 +33,10 @@ class Bus {
 public:
     void attach(Cartridge* cart, Cartridge* bios, Vdp* vdp, Psg* psg, Io* io);
     void reset();
+
+    // Modèle de console : réglage matériel (Machine::setModel), survit au
+    // reset. Conditionne le décodage des ports 0x00-0x06.
+    void setModel(Model m) { model = m; }
 
     u8   read8(u16 addr);
     void write8(u16 addr, u8 v);
@@ -51,4 +57,5 @@ private:
     Io*  io  = nullptr;
 
     u8 memControl = 0;  // port 0x3E (bit à 1 = désactivé) ; 0 = tout activé
+    Model model = Model::Sms;
 };

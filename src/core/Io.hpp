@@ -23,11 +23,14 @@ public:
     enum Button : u8 {
         Up = 1 << 0, Down = 1 << 1, Left = 1 << 2, Right = 1 << 3,
         B1 = 1 << 4, B2 = 1 << 5,
+        Start = 1 << 6,  // Game Gear uniquement (pad 0, port 0x00) — sur
+                         // SMS le « Start » de fait est le bouton Pause (NMI)
     };
 
     void reset();
 
     u8   readPort(u8 port);        // 0xDC ou 0xDD
+    u8   readGgPort(u8 port);      // Game Gear : ports 0x00-0x06 en lecture
     void writeIoControl(u8 v);     // 0x3F
     void writeSdscControl(u8 v);   // 0xFC
     void writeSdscData(u8 v);      // 0xFD

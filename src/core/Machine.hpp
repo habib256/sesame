@@ -41,11 +41,22 @@ public:
         return (region_ == Region::Pal) ? kCpuClockPal : kCpuClockNtsc;
     }
 
+    // Modèle émulé (SMS ou Game Gear). Auto-détecté par loadRom() sur
+    // l'extension « .gg » ; propagé au VDP (CRAM 12 bits) et au Bus
+    // (ports 0x00-0x06). Réglage matériel : survit au reset.
+    void setModel(Model m);
+    Model model() const { return model_; }
+
     // Exécute exactement une trame vidéo (jusqu'au frameDone() du VDP).
     void runFrame();
 
-    // Bouton Pause de la console = NMI.
-    void pressPause() { cpu.triggerNmi(); }
+    // Bouton Pause de la console = NMI. La Game Gear n'a PAS de bouton
+    // Pause : son Start est un simple bit lu sur le port 0x00
+    // (Io::Button::Start), jamais un NMI.
+    void pressPause() {
+        if (model_ == Model::Sms)
+            cpu.triggerNmi();
+    }
 
     // Trace optionnelle : si non nul, une ligne par instruction y est écrite
     // (PC, registres, mnémonique) — format stable pour diff.
@@ -63,6 +74,7 @@ public:
 
 private:
     Region region_ = Region::Ntsc;
+    Model  model_  = Model::Sms;
     int lineCycles = 0;
     void traceStep();
 };

@@ -62,6 +62,7 @@ void Psg::reset() {
     }
     noiseLfsr   = 0x8000;
     noiseFF     = 0;
+    stereoMask  = 0xFF;
     clockAcc    = 0;
     resampleAcc = 0;
     sampleIndex = 0;

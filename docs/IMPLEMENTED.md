@@ -32,6 +32,21 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   `PsgBlipTable.inc` commité), deltas + intégrateur. Repliement mesuré à
   ~-67 dB contre ~-19 dB avec l'ancien filtre boîte (2026-08)
 
+## Game Gear (mode natif)
+- Auto-détection par l'extension `.gg` (`Machine::loadRom` -> `setModel`,
+  propagé au VDP et au Bus) ; une `.sms` reste émulée en Master System
+  (le mode compatibilité SMS-sur-GG n'est PAS couvert)
+- VDP : CRAM 64 octets, écrite PAR MOT (octet pair latché, octet impair
+  commite l'entrée 12 bits ----BBBBGGGGRRRR) ; rendu de la trame 256×192
+  complète, fenêtre visible 160×144 centrée recadrée par les frontends
+  (GUI : 10:9 pixels carrés, sous-image via GL_UNPACK_ROW_LENGTH ;
+  headless : PPM 160×144)
+- Ports 0x00-0x06 (soustraits à la règle pair/impair 0x3E/0x3F) :
+  0x00 = Start (actif bas, `Io::Button::Start`, touche Entrée/Select au
+  GUI) + région export NTSC ; 0x01-0x05 = EXT/série non connectés ;
+  0x06 = stéréo PSG (mémorisé, sortie encore mono — TODO)
+- Pas de NMI Pause (`Machine::pressPause` sans effet en Game Gear)
+
 ## Mapper / cartouche (`src/core/Cartridge.cpp`)
 - Mapper Sega standard (0xFFFC-0xFFFF), premier Ko non paginé
 - RAM cartouche 2×16 Ko (bit3/bit2 de 0xFFFC), persistée en `<rom>.sav`

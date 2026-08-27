@@ -1,6 +1,6 @@
 # Sesame
 
-A hackable, educational **Sega Master System** emulator in C++17.
+A hackable, educational **Sega Master System / Game Gear** emulator in C++17.
 
 Sesame is built for transparency over raw accuracy: the code is meant to be
 read. The core (`sesame_core`) has zero dependencies and knows nothing about
@@ -11,8 +11,11 @@ the GUI; the `Bus` class *is* the memory map.
 - Full Z80 core (documented + undocumented opcodes, standard cycle counts)
 - VDP 315-5124, mode 4: background scrolling, sprites, line & VBlank interrupts
 - NTSC and PAL consoles (`--pal`: 313 lines, ~49.70 Hz, PAL CPU clock)
-- SN76489 PSG (3 square channels + noise), 44.1 kHz output
-- Standard Sega mapper, `.sms` ROM loading (512-byte dumper headers tolerated)
+- SN76489 PSG (3 square channels + noise), 44.1 kHz band-limited output
+- Game Gear mode (auto-detected from `.gg`): 12-bit palette, 160x144
+  cropped display, Start button, GG-specific ports
+- Standard Sega mapper, `.sms`/`.gg` ROM loading (512-byte dumper headers
+  tolerated)
 - Two controllers, Pause (NMI), Reset
 - BIOS slot with real memory-control port (`$3E`): boots BIOS images and
   BIOS + cartridge combos

@@ -57,6 +57,24 @@ u8 Io::readPort(u8 port) {
     return r;
 }
 
+u8 Io::readGgPort(u8 port) {
+    // Ports propres à la Game Gear (réf. SMS Power!, « Game Gear hardware »).
+    switch (port) {
+    case 0x00:
+        // bit 7 = Start (ACTIF BAS), bit 6 = NJAP (1 = export),
+        // bit 5 = NNTS (0 = NTSC — la GG est NTSC-only). Bits 0-4 : non
+        // câblés, lus à 0. Console émulée : export.
+        return (pad[0] & Start) ? 0x40 : 0xC0;
+    case 0x01:
+        // Port EXT (câble Gear-to-Gear) : rien de connecté, broches hautes.
+        return 0x7F;
+    default:
+        // 0x02-0x05 : registres du lien série — liaison absente, tout à 0.
+        // 0x06 (stéréo PSG) est en écriture seule : lecture = 0xFF.
+        return (port == 0x06) ? 0xFF : 0x00;
+    }
+}
+
 void Io::writeIoControl(u8 v) {
     // TODO(v2) : détecter ici le front MONTANT d'une broche TH (comparer
     // l'ancien ioControl au nouveau) et verrouiller le HCounter du VDP —

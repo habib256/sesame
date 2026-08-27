@@ -112,12 +112,14 @@ u8 readGamepadMask(int jid, bool* startDown, bool* selectDown)
 }
 
 // -----------------------------------------------------------------------------
-//  Calcule le rectangle 4:3 letterboxé dans une fenêtre de taille fbW×fbH.
+//  Calcule le rectangle letterboxé de ratio `target` dans une fenêtre fbW×fbH.
+//  SMS : 4:3 (pixels non carrés, 256×192 étiré sur un tube 4:3) ;
+//  Game Gear : 10:9 (160×144 en pixels carrés, choix classique des
+//  émulateurs pour la dalle LCD).
 // -----------------------------------------------------------------------------
-void computeViewport(int fbW, int fbH, int& x, int& y, int& w, int& h)
+void computeViewport(int fbW, int fbH, double target,
+                     int& x, int& y, int& w, int& h)
 {
-    // La SMS sort du 4:3 (pixels non carrés : 256×192 étiré sur un tube 4:3).
-    const double target = 4.0 / 3.0;
     const double actual = (fbH > 0) ? static_cast<double>(fbW) / fbH : target;
     if (actual > target) {
         // Fenêtre trop large : bandes verticales sur les côtés.
@@ -140,8 +142,8 @@ int main(int argc, char** argv)
 {
     if (argc < 2) {
         std::fprintf(stderr,
-                     "usage: sesame <rom.sms> [--bios FILE] [--pal] [--crt] "
-                     "[--kiosk] [--kiosk-monitor N]\n");
+                     "usage: sesame <rom.sms|rom.gg> [--bios FILE] [--pal] "
+                     "[--crt] [--kiosk] [--kiosk-monitor N]\n");
         std::fprintf(stderr, "error: no ROM file given\n");
         return 1;
     }
@@ -223,8 +225,10 @@ int main(int argc, char** argv)
         return 1;
     }
 
+    const char* consoleName =
+        (machine.model() == Model::GameGear) ? "Game Gear" : "Master System";
     const std::string title =
-        "Sesame — Master System — " + baseName(titlePath);
+        std::string("Sesame — ") + consoleName + " — " + baseName(titlePath);
 
     // Mode borne : fenêtre créée DIRECTEMENT en plein écran exclusif sur le
     // moniteur choisi (reste au-dessus des panneaux/dock, garde le focus),
@@ -421,9 +425,12 @@ int main(int argc, char** argv)
                 // power-cycle (le BIOS éventuel reste en place et boote le jeu).
                 machine.cart.persistSaveRam();
                 if (machine.loadRom(menu.chosenRom())) {
+                    // loadRom() peut changer de modèle (.sms <-> .gg).
                     glfwSetWindowTitle(
-                        win, ("Sesame — Master System — " +
-                              baseName(menu.chosenRom())).c_str());
+                        win, (std::string("Sesame — ") +
+                              (machine.model() == Model::GameGear
+                                   ? "Game Gear" : "Master System") +
+                              " — " + baseName(menu.chosenRom())).c_str());
                 } else {
                     std::fprintf(stderr, "error: cannot load ROM '%s'\n",
                                  menu.chosenRom().c_str());
@@ -443,15 +450,22 @@ int main(int argc, char** argv)
                 break;
             }
         } else {
-            machine.io.setPad(0, static_cast<u8>(kbMask | gp0));
-            machine.io.setPad(1, gp1);
+            u8 p0 = static_cast<u8>(kbMask | gp0);
 
-            // Entrée ou Select manette = bouton Pause de la console (NMI sur
-            // FRONT).
+            // Entrée ou Select manette : Pause SMS (NMI sur FRONT) — ou
+            // bouton Start de la Game Gear (simple NIVEAU lu sur le port
+            // 0x00, les jeux GG s'en servent comme d'un bouton normal).
             const bool pauseDown = enterDown || selectDown;
-            if (pauseDown && !pauseWasDown)
+            if (machine.model() == Model::GameGear) {
+                if (pauseDown)
+                    p0 |= Io::Start;
+            } else if (pauseDown && !pauseWasDown) {
                 machine.pressPause();
+            }
             pauseWasDown = pauseDown;
+
+            machine.io.setPad(0, p0);
+            machine.io.setPad(1, gp1);
 
             // Émule les trames arrivées à échéance (0 sur un écran plus
             // rapide que 60 Hz, parfois 2 pour rattraper un hoquet — borné
@@ -478,17 +492,28 @@ int main(int argc, char** argv)
             }
         }
 
-        // Téléversement du framebuffer RGBA (u32 LE : octets R,G,B,A en mémoire).
+        // Téléversement du framebuffer RGBA (u32 LE : octets R,G,B,A en
+        // mémoire). En Game Gear, seule la fenêtre visible 160×144 (centrée
+        // dans la trame 256×192 du VDP) est téléversée : GL_UNPACK_ROW_LENGTH
+        // fait lire la sous-image en place, sans copie.
+        const bool gearGear = (machine.model() == Model::GameGear);
+        const int srcW = gearGear ? Vdp::kGgWidth : Vdp::kWidth;
+        const int srcH = gearGear ? Vdp::kGgHeight : Vdp::kHeight;
+        const u32* srcPx = machine.vdp.frameBuffer() +
+            (gearGear ? Vdp::kGgOffsetY * Vdp::kWidth + Vdp::kGgOffsetX : 0);
         glBindTexture(GL_TEXTURE_2D, tex);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, Vdp::kWidth, Vdp::kHeight, 0,
-                     GL_RGBA, GL_UNSIGNED_BYTE, machine.vdp.frameBuffer());
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, Vdp::kWidth);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, srcW, srcH, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, srcPx);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
-        // Rendu : fond noir + quad texturé 4:3 letterboxé.
+        // Rendu : fond noir + quad texturé letterboxé (4:3 SMS, 10:9 GG).
         int fbW = 0, fbH = 0;
         glfwGetFramebufferSize(win, &fbW, &fbH);
 
         int vx, vy, vw, vh;
-        computeViewport(fbW, fbH, vx, vy, vw, vh);
+        computeViewport(fbW, fbH, gearGear ? 10.0 / 9.0 : 4.0 / 3.0,
+                        vx, vy, vw, vh);
 
         // Passe CRT optionnelle : transforme la texture SMS brute en écran
         // « verre » rendu à la taille du viewport. En cas d'échec (FBO refusé),
@@ -496,7 +521,7 @@ int main(int argc, char** argv)
         GLuint drawTex = tex;
         if (crtOn && crt.available()) {
             if (const unsigned int out =
-                    crt.process(tex, Vdp::kWidth, Vdp::kHeight, vw, vh))
+                    crt.process(tex, srcW, srcH, vw, vh))
                 drawTex = out;
         }
 

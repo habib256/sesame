@@ -35,10 +35,14 @@ et contraintes de licence détaillées là-bas).
 - [ ] Save-states
 - [x] BIOS optionnel + contrôle mémoire 0x3E réel (2026-08 ; reste : bouton
       Reset console et lecture-arrière 0x3E côté SMS1)
-- [ ] Game Gear — [R] périmètre confirmé : fenêtre 160x144 centrée dans la
-      sortie VDP, CRAM 12 bits (2 octets/entrée), panning stéréo PSG
-      (port 0x06), port Start (0x00), mode compatibilité SMS (palette
-      réduite) pour les cartouches SMS via adaptateur
+- [x] Game Gear — mode natif : auto-détection `.gg`, CRAM 12 bits écrite
+      par mot (latch pair/impair), fenêtre 160x144 recadrée dans les deux
+      frontends (GUI 10:9, PPM headless), ports 0x00-0x06 (Start actif bas,
+      EXT/série stub, stéréo PSG mémorisée), pas de NMI Pause (2026-08)
+- [ ] Game Gear, suite : sortie audio STÉRÉO réelle (le registre 0x06 est
+      mémorisé mais la sortie reste mono), mode compatibilité SMS-sur-GG
+      (cartouche .sms via adaptateur : palette réduite), shader LCD
+      (rémanence/ghosting de la dalle d'origine)
 - [ ] Mappers exotiques (Codemasters, Korean/Janggun) ; [R] EEPROM 93C46
       (cartouches de baseball, sauvegarde des stats)
 - [x] Sauvegarde RAM cartouche sur disque (.sav — GUI toujours, headless

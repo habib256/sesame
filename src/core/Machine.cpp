@@ -5,6 +5,8 @@
 
 #include "Machine.hpp"
 
+#include <cctype>
+
 Machine::Machine() {
     bus.attach(&cart, &bios, &vdp, &psg, &io);
     bios.savEnabled = false;  // un BIOS n'a pas de RAM de sauvegarde sur pile
@@ -17,9 +19,23 @@ void Machine::setRegion(Region r) {
     psg.setClock(cpuClock());
 }
 
+void Machine::setModel(Model m) {
+    model_ = m;
+    vdp.setModel(m);
+    bus.setModel(m);
+}
+
 bool Machine::loadRom(const std::string& path) {
     if (!cart.load(path))
         return false;
+    // Auto-détection du modèle par l'extension : « .gg » = Game Gear.
+    // (Le mode compatibilité SMS-sur-GG — cartouche .sms via adaptateur —
+    // n'est pas couvert ici : une .sms reste émulée en Master System.)
+    auto dot = path.rfind('.');
+    std::string ext = (dot == std::string::npos) ? "" : path.substr(dot);
+    for (char& c : ext)
+        c = (char)tolower((unsigned char)c);
+    setModel(ext == ".gg" ? Model::GameGear : Model::Sms);
     reset();
     return true;
 }

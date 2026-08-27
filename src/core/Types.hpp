@@ -22,3 +22,12 @@ enum class Region : u8 {
     Ntsc,  // Japon / Amérique du Nord : 262 lignes, ~59,92 Hz, CPU 3 579 545 Hz
     Pal,   // Europe : 313 lignes, ~49,70 Hz, CPU 3 546 893 Hz
 };
+
+// Modèle de console émulé. La Game Gear partage l'essentiel de la SMS
+// (Z80, VDP mode 4, PSG) mais diffère par : CRAM 12 bits (32 couleurs
+// parmi 4096), fenêtre visible 160×144 centrée, ports 0x00-0x06 propres
+// (bouton Start, stéréo PSG) et absence de NMI Pause.
+enum class Model : u8 {
+    Sms,       // Master System / Mark III
+    GameGear,  // Game Gear (mode natif)
+};

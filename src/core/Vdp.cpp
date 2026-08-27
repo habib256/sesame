@@ -31,10 +31,27 @@ inline u32 cramToRgba(u8 c) {
     return 0xFF000000u | (b << 16) | (g << 8) | r;
 }
 
+// Conversion d'une entrée CRAM Game Gear 12 bits (----BBBBGGGGRRRR, deux
+// octets little-endian) vers RGBA. Expansion 4 bits -> 8 bits (x * 17).
+inline u32 gearCramToRgba(u16 c) {
+    const u32 r = static_cast<u32>(c & 0x0F) * 17u;
+    const u32 g = static_cast<u32>((c >> 4) & 0x0F) * 17u;
+    const u32 b = static_cast<u32>((c >> 8) & 0x0F) * 17u;
+    return 0xFF000000u | (b << 16) | (g << 8) | r;
+}
+
 // Noir opaque (utilisé au reset et pour les modes non gérés).
 constexpr u32 kBlack = 0xFF000000u;
 
 } // namespace
+
+// Entrée de palette (0-31) vers pixel RGBA, selon le modèle émulé.
+u32 Vdp::colorAt(int index) const {
+    if (model == Model::GameGear)
+        return gearCramToRgba(static_cast<u16>(
+            cram[index * 2] | (cram[index * 2 + 1] << 8)));
+    return cramToRgba(cram[index]);
+}
 
 // -----------------------------------------------------------------------------
 //  Réinitialisation
@@ -48,6 +65,7 @@ void Vdp::reset() {
     for (u32& p : fb) p = kBlack;
 
     curLine = 0;
+    cramLatch = 0;
     addr = 0;
     code = 0;
     readBuffer = 0;
@@ -106,8 +124,21 @@ u8 Vdp::readData() {
 void Vdp::writeData(u8 v) {
     ctrlLatch = false;
     if (code == 3) {
-        // Code 3 : écriture CRAM (32 entrées, adresse repliée sur 5 bits).
-        cram[addr & 0x1F] = v;
+        if (model == Model::GameGear) {
+            // Game Gear : CRAM de 64 octets, écrite PAR MOT. L'octet PAIR
+            // est latché ; l'octet IMPAIR commite les deux d'un coup
+            // (comportement matériel : une entrée 12 bits ne change jamais
+            // à moitié).
+            if (addr & 1) {
+                cram[addr & 0x3E] = cramLatch;
+                cram[addr & 0x3F] = v;
+            } else {
+                cramLatch = v;
+            }
+        } else {
+            // SMS : 32 entrées d'un octet, adresse repliée sur 5 bits.
+            cram[addr & 0x1F] = v;
+        }
     } else {
         // Codes 0/1/2 : écriture VRAM.
         vram[addr] = v;
@@ -215,7 +246,7 @@ void Vdp::renderLine(int y) {
     }
 
     // Couleur de bord : entrée (reg7 & 0xF) de la palette SPRITE (CRAM 16-31).
-    const u32 border = cramToRgba(cram[16 + (regs[7] & 0x0F)]);
+    const u32 border = colorAt(16 + (regs[7] & 0x0F));
 
     // Affichage coupé (reg1 bit 6 = 0) : ligne entière à la couleur de bord.
     if ((regs[1] & 0x40) == 0) {
@@ -272,7 +303,7 @@ void Vdp::renderLine(int y) {
                      | (((vram[pa + 3] >> bit) & 1) << 3);
 
         bgIndex[x] = static_cast<u8>(ci);
-        dst[x] = cramToRgba(cram[pal + ci]);
+        dst[x] = colorAt(pal + ci);
     }
 
     // ------------------------------------------------------------- Sprites ---
@@ -334,7 +365,7 @@ void Vdp::renderLine(int y) {
             if (bgPrio[sx] && bgIndex[sx] != 0) continue;
 
             // Les sprites utilisent TOUJOURS la palette 1 (CRAM 16-31).
-            dst[sx] = cramToRgba(cram[16 + ci]);
+            dst[sx] = colorAt(16 + ci);
         }
     }
 

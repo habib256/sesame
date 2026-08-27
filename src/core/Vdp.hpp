@@ -20,10 +20,20 @@ public:
     static constexpr int kLinesNtsc = 262;
     static constexpr int kLinesPal  = 313;
 
+    // Fenêtre visible Game Gear : 160×144 centrée dans la sortie 256×192.
+    // Le VDP rend la trame complète ; les frontends recadrent.
+    static constexpr int kGgWidth   = 160;
+    static constexpr int kGgHeight  = 144;
+    static constexpr int kGgOffsetX = (kWidth  - kGgWidth)  / 2;  // 48
+    static constexpr int kGgOffsetY = (kHeight - kGgHeight) / 2;  // 24
+
     void reset();
 
     // Norme vidéo : réglage matériel du frontend, survit au reset.
     void setRegion(Region r) { region = r; }
+    // Modèle de console : réglage matériel (Machine::setModel), survit au
+    // reset. En Game Gear, la CRAM passe en entrées 12 bits (2 octets).
+    void setModel(Model m) { model = m; }
     int  linesPerFrame() const {
         return (region == Region::Pal) ? kLinesPal : kLinesNtsc;
     }
@@ -51,12 +61,16 @@ public:
 
     // --- État exposé (débogueur / save-state) --------------------------------
     u8 vram[0x4000]{};
-    u8 cram[32]{};
+    // CRAM : 32 octets utilisés en SMS (--BBGGRR), 64 en Game Gear
+    // (32 entrées de 2 octets, ----BBBBGGGGRRRR little-endian).
+    u8 cram[64]{};
     u8 regs[16]{};
 
 private:
     u32 fb[kWidth * kHeight]{};
     Region region = Region::Ntsc;
+    Model  model  = Model::Sms;
+    u8 cramLatch = 0;   // GG : octet pair latché, commité par l'octet impair
     int curLine = 0;
 
     // Décodage adresse/contrôle
@@ -73,5 +87,6 @@ private:
     bool frameDoneFlag = false;
     u8  hLatch = 0;
 
+    u32  colorAt(int index) const;  // entrée CRAM 0-31 -> RGBA selon modèle
     void renderLine(int y);
 };

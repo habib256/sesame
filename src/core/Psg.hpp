@@ -27,6 +27,12 @@ public:
     // Écriture CPU (port 0x40-0x7F en écriture, canoniquement 0x7F).
     void write(u8 v);
 
+    // Game Gear : registre stéréo (port 0x06) — bit n = canal n vers la
+    // DROITE, bit n+4 = canal n vers la GAUCHE. Mémorisé seulement : la
+    // sortie v1 reste mono (équivalent du haut-parleur interne, qui somme
+    // les deux voies). TODO : sortie stéréo réelle (casque).
+    void writeStereo(u8 v) { stereoMask = v; }
+
     // Avance l'horloge du nombre de cycles CPU écoulés et pousse les
     // échantillons produits dans l'anneau interne.
     void runCycles(int cpuCycles);
@@ -39,6 +45,7 @@ private:
     // rééchantillonnage, anneau) : voir Psg.cpp.
     int cpuClock = 3579545;  // Hz (NTSC par défaut)
 
+    u8  stereoMask = 0xFF;  // GG : tous les canaux des deux côtés au reset
     u8  latchedChannel = 0;
     bool latchedIsVolume = false;
     u16 toneReg[4]{};      // 3 tonalités + contrôle bruit
