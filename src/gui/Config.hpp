@@ -33,6 +33,7 @@ struct Config {
     bool noSpriteLimit = false;   // no_sprite_limit (option pédagogique)
     bool lightPhaser = false;     // light_phaser : souris = pistolet (port A)
     bool rewind = true;           // rewind : retour arrière (touche Backspace)
+    bool eeprom = false;          // eeprom : 93C46 (cartouches de baseball)
     int  rewindSeconds = 8;       // rewind_seconds : profondeur de l'historique
     std::string romDir;           // rom_dir : dossiers du menu borne séparés
                                   // par « ; », vide = dossier de la ROM

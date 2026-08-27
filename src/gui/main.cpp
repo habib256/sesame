@@ -307,6 +307,7 @@ int main(int argc, char** argv)
     // --- Machine -------------------------------------------------------------
     Machine machine;
     machine.setRegion(pal ? Region::Pal : Region::Ntsc);
+    machine.cart.eepromEnabled = cfg.eeprom;
     if (biosPath && !machine.loadBios(biosPath)) {
         std::fprintf(stderr, "error: cannot load BIOS '%s' (missing or invalid file)\n",
                      biosPath);

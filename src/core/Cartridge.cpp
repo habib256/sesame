@@ -19,6 +19,22 @@
 #include "StateIO.hpp"
 #include <fstream>
 
+namespace {
+// Octets à bits inversés (pages « miroirs » du mapper Janggun).
+struct BitRev {
+    u8 t[256];
+    BitRev() {
+        for (int i = 0; i < 256; ++i) {
+            u8 v = 0;
+            for (int b = 0; b < 8; ++b)
+                if (i & (1 << b)) v |= (u8)(0x80 >> b);
+            t[i] = v;
+        }
+    }
+};
+const BitRev kBitRev;
+}  // namespace
+
 bool Cartridge::load(const std::string& path) {
     std::ifstream f(path, std::ios::binary | std::ios::ate);
     if (!f)
@@ -94,12 +110,27 @@ bool Cartridge::load(const std::string& path) {
         if (sav)
             sav.read(reinterpret_cast<char*>(cartRam[0]), sizeof(cartRam));
     }
+    eePath.clear();
+    eeDirty = false;
+    if (eepromEnabled && savEnabled) {
+        eePath = savePath.substr(0, savePath.size() - 4) + ".eeprom";
+        std::ifstream f(eePath, std::ios::binary);
+        if (f)
+            f.read(reinterpret_cast<char*>(ee.data), sizeof(ee.data));
+    }
 
     reset();
     return true;
 }
 
 void Cartridge::persistSaveRam() {
+    if (eeDirty && !eePath.empty()) {
+        std::ofstream f(eePath, std::ios::binary | std::ios::trunc);
+        if (f) {
+            f.write(reinterpret_cast<const char*>(ee.data), sizeof(ee.data));
+            if (f) eeDirty = false;
+        }
+    }
     if (!saveRamDirty || savePath.empty())
         return;
     std::ofstream sav(savePath, std::ios::binary | std::ios::trunc);
@@ -118,9 +149,15 @@ void Cartridge::reset() {
     pageReg[0] = 0;
     pageReg[1] = 1;
     pageReg[2] = (mapperType == Mapper::Codemasters) ? 0 : 2;
+    pageReg8[0] = 2; pageReg8[1] = 3;   // Janggun : paires des pages 16 Ko
+    pageReg8[2] = 4; pageReg8[3] = 5;
     ramControl = 0;
     cmRamEnabled = false;
     segaRegsSeen = false;
+    // 93C46 : lignes au repos, contenu CONSERVÉ (c'est une EEPROM).
+    ee.phase = 0; ee.bits = 0; ee.outBits = 0;
+    ee.writeEnabled = false; ee.doLine = true;
+    ee.prevClk = false; ee.cs = false; ee.wral = false;
 }
 
 u8 Cartridge::read(u16 addr) {
@@ -136,6 +173,22 @@ u8 Cartridge::read(u16 addr) {
         return rom[(static_cast<size_t>(pageReg[slot] & romMask) << 14) |
                    (addr & 0x3FFF)];
     }
+
+    if (mapperType == Mapper::Janggun && addr >= 0x4000) {
+        // Janggun : quatre fenêtres de 8 Ko, pages à octets miroirs si le
+        // bit 6 de la page est levé.
+        const int slot = (addr - 0x4000) >> 13;
+        const u8  page = pageReg8[slot];
+        const int mask8 = romMask * 2 + 1;
+        const u8  byte = rom[(static_cast<size_t>(page & 0x3F & mask8) << 13) |
+                             (addr & 0x1FFF)];
+        return (page & 0x40) ? kBitRev.t[byte] : byte;
+    }
+
+    // EEPROM 93C46 : la fenêtre 0x8000-0xBFFF devient l'interface série
+    // (ligne DO en bit 0, autres bits hauts).
+    if (eepromEnabled && addr >= 0x8000)
+        return static_cast<u8>(0xFE | (ee.doLine ? 1 : 0));
 
     // Mappers Sega et coréen (même plan de lecture ; le coréen n'écrit
     // simplement jamais pageReg[0]/[1] ni le contrôle RAM).
@@ -177,9 +230,26 @@ void Cartridge::write(u16 addr, u8 v) {
         }
     }
 
+    if (mapperType == Mapper::Janggun) {
+        switch (addr) {
+        case 0x4000: pageReg8[0] = v; return;
+        case 0x6000: pageReg8[1] = v; return;
+        case 0x8000: pageReg8[2] = v; return;
+        case 0xA000: pageReg8[3] = v; return;
+        default: return;
+        }
+    }
+
     if (mapperType == Mapper::Korean) {
         if (addr == 0xA000)
             pageReg[2] = v;
+        return;
+    }
+
+    // EEPROM 93C46 : les écritures dans la fenêtre posent les lignes
+    // DI/CLK/CS (bits 0-2).
+    if (eepromEnabled && addr >= 0x8000 && addr < 0xC000) {
+        eeLines(v);
         return;
     }
 
@@ -198,13 +268,35 @@ void Cartridge::write(u16 addr, u8 v) {
     if (addr == 0xA000 && !segaRegsSeen && rom.size() > 0x8000) {
         mapperType = Mapper::Korean;
         pageReg[2] = v;
+        return;
+    }
+
+    // Heuristique Janggun : l'adresse 0x6000 n'est un registre de page QUE
+    // sur cette cartouche (8 Ko). On reprend les fenêtres 16 Ko courantes
+    // en paires 8 Ko puis on applique l'écriture.
+    if (addr == 0x6000 && rom.size() > 0x8000) {
+        mapperType = Mapper::Janggun;
+        pageReg8[0] = static_cast<u8>(pageReg[1] * 2);
+        pageReg8[1] = v;
+        pageReg8[2] = static_cast<u8>(pageReg[2] * 2);
+        pageReg8[3] = static_cast<u8>(pageReg[2] * 2 + 1);
     }
 }
 
 void Cartridge::writeMapper(u16 addr, u8 v) {
     // Registres du mapper Sega, « sous » le miroir RAM (le Bus écrit les
     // deux). Les cartouches Codemasters et coréennes n'ont pas de logique
-    // à ces adresses.
+    // à ces adresses ; la Janggun y écoute ses paires 16 Ko.
+    if (mapperType == Mapper::Janggun) {
+        if (addr == 0xFFFE) {
+            pageReg8[0] = static_cast<u8>(v * 2);
+            pageReg8[1] = static_cast<u8>(v * 2 + 1);
+        } else if (addr == 0xFFFF) {
+            pageReg8[2] = static_cast<u8>(v * 2);
+            pageReg8[3] = static_cast<u8>(v * 2 + 1);
+        }
+        return;
+    }
     if (mapperType != Mapper::Sega)
         return;
     switch (addr) {
@@ -214,6 +306,116 @@ void Cartridge::writeMapper(u16 addr, u8 v) {
     case 0xFFFF: pageReg[2] = v; segaRegsSeen = true; break;
     default: break;
     }
+}
+
+// -----------------------------------------------------------------------------
+//  EEPROM série 93C46 (protocole Microwire) — 64 mots de 16 bits.
+//  Une commande = bit de START (1) + 2 bits d'opcode + 6 bits d'adresse,
+//  décalés sur les fronts MONTANTS de CLK pendant que CS est haut :
+//    READ  (10) : sort un 0 factice puis les 16 bits MSB en tête ;
+//    WRITE (01) : reçoit 16 bits puis écrit (si EWEN) ;
+//    ERASE (11) : mot à 0xFFFF ;
+//    00 + adr 11xxxx = EWEN, 00xxxx = EWDS, 10xxxx = ERAL, 01xxxx = WRAL.
+//  CS bas remet la machine à états en attente de start (DO au repos = 1).
+// -----------------------------------------------------------------------------
+void Cartridge::eeClockIn(int di) {
+    switch (ee.phase) {
+    case 0:                       // attente du bit de start
+        if (di) {
+            ee.phase = 1;
+            ee.shiftIn = 0;
+            ee.bits = 0;
+        }
+        break;
+    case 1:                       // opcode + adresse (8 bits)
+        ee.shiftIn = static_cast<u16>((ee.shiftIn << 1) | di);
+        if (++ee.bits < 8)
+            break;
+        ee.op   = static_cast<u8>((ee.shiftIn >> 6) & 3);
+        ee.addr = static_cast<u8>(ee.shiftIn & 0x3F);
+        ee.bits = 0;
+        ee.shiftIn = 0;
+        ee.wral = false;
+        switch (ee.op) {
+        case 2:                   // READ
+            ee.shiftOut = ee.data[ee.addr];
+            ee.outBits = 16;
+            ee.doLine = false;    // 0 factice avant les données
+            ee.phase = 3;
+            break;
+        case 1:                   // WRITE
+            ee.phase = 2;
+            break;
+        case 3:                   // ERASE
+            if (ee.writeEnabled) {
+                ee.data[ee.addr] = 0xFFFF;
+                eeDirty = true;
+            }
+            ee.phase = 0;
+            ee.doLine = true;     // prêt
+            break;
+        default:                  // 00 : sous-commande dans l'adresse
+            switch ((ee.addr >> 4) & 3) {
+            case 3: ee.writeEnabled = true;  ee.phase = 0; break;  // EWEN
+            case 0: ee.writeEnabled = false; ee.phase = 0; break;  // EWDS
+            case 2:                                                 // ERAL
+                if (ee.writeEnabled) {
+                    for (u16& w : ee.data) w = 0xFFFF;
+                    eeDirty = true;
+                }
+                ee.phase = 0;
+                break;
+            case 1:                                                 // WRAL
+                ee.wral = true;
+                ee.phase = 2;
+                break;
+            }
+            ee.doLine = true;
+            break;
+        }
+        break;
+    case 2:                       // 16 bits de données entrantes
+        ee.shiftIn = static_cast<u16>((ee.shiftIn << 1) | di);
+        if (++ee.bits < 16)
+            break;
+        if (ee.writeEnabled) {
+            if (ee.wral)
+                for (u16& w : ee.data) w = ee.shiftIn;
+            else
+                ee.data[ee.addr] = ee.shiftIn;
+            eeDirty = true;
+        }
+        ee.phase = 0;
+        ee.doLine = true;         // prêt (l'écriture réelle est instantanée)
+        break;
+    case 3:                       // 16 bits sortants (après le 0 factice)
+        if (ee.outBits > 0) {
+            ee.doLine = (ee.shiftOut & 0x8000) != 0;
+            ee.shiftOut = static_cast<u16>(ee.shiftOut << 1);
+            --ee.outBits;
+        } else {
+            ee.doLine = true;
+            ee.phase = 0;
+        }
+        break;
+    }
+}
+
+void Cartridge::eeLines(u8 v) {
+    const bool cs  = (v & 4) != 0;
+    const bool clk = (v & 2) != 0;
+    const int  di  = v & 1;
+    if (!cs) {
+        // CS bas : machine à états au repos, DO relâchée.
+        ee.phase = 0;
+        ee.bits = 0;
+        ee.outBits = 0;
+        ee.doLine = true;
+    } else if (clk && !ee.prevClk) {
+        eeClockIn(di);            // front montant d'horloge
+    }
+    ee.cs = cs;
+    ee.prevClk = clk;
 }
 
 // -----------------------------------------------------------------------------
@@ -227,11 +429,27 @@ void Cartridge::serialize(StateIO& s) {
     if (s.loading())
         mapperType = (Mapper)type;   // un type coréen détecté est restauré
     s.bytes(pageReg, sizeof(pageReg));
+    s.bytes(pageReg8, sizeof(pageReg8));
     s.u8v(ramControl);
     s.bytes(&cartRam[0][0], sizeof(cartRam));
     s.boolv(cmRamEnabled);
     s.bytes(cmRam, sizeof(cmRam));
     s.boolv(segaRegsSeen);
-    if (s.loading())
+    for (u16& w : ee.data) s.u16v(w);
+    s.u8v(ee.phase);
+    s.u16v(ee.shiftIn);
+    s.intv(ee.bits);
+    s.u8v(ee.op);
+    s.u8v(ee.addr);
+    s.boolv(ee.wral);
+    s.u16v(ee.shiftOut);
+    s.intv(ee.outBits);
+    s.boolv(ee.writeEnabled);
+    s.boolv(ee.doLine);
+    s.boolv(ee.prevClk);
+    s.boolv(ee.cs);
+    if (s.loading()) {
         saveRamDirty = true;
+        eeDirty = true;
+    }
 }

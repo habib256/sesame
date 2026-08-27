@@ -111,6 +111,10 @@ class Asm:
     def cp_d(self):            self.db(0xBA)                  # CP D
     def cp_e(self):            self.db(0xBB)                  # CP E
     def or_a(self):            self.db(0xB7)                  # OR A
+    def or_l(self):            self.db(0xB5)                  # OR L
+    def ld_l_a(self):          self.db(0x6F)                  # LD L,A
+    def ld_hl_imm(self, nn):   self.db(0x21, nn & 0xFF, nn >> 8)  # LD HL,nn
+    def add_hl_hl(self):       self.db(0x29)                  # ADD HL,HL
     def xor_a(self):           self.db(0xAF)                  # XOR A
     def push_af(self):         self.db(0xF5)                  # PUSH AF
     def pop_af(self):          self.db(0xF1)                  # POP AF

@@ -37,6 +37,8 @@ void printUsage(FILE* out)
         "  --gg                  force Game Gear hardware: an SMS cartridge\n"
         "                        runs in compatibility mode (160x144 window)\n"
         "  --no-sprite-limit     remove the sprites-per-scanline hardware limit\n"
+        "  --eeprom              map a 93C46 serial EEPROM at 0x8000 (baseball\n"
+        "                        carts; persisted in <rom>.eeprom with --sav)\n"
         "  --gun X Y             aim the Light Phaser at screen position X,Y\n"
         "  --rewind-check        exercise the in-memory rewind states and verify\n"
         "                        that rewinding then replaying is pixel-exact\n"
@@ -225,6 +227,7 @@ int main(int argc, char** argv)
     bool        noSpriteLimit = false;    // --no-sprite-limit (pédagogique)
     long        gunX = -1, gunY = -1;     // --gun X Y : Light Phaser visé
     bool        rewindCheck = false;      // --rewind-check : test du rewind
+    bool        eeprom = false;           // --eeprom : 93C46 sur 0x8000+
     const char* stateLoadPath = nullptr;  // --state-load : avant la 1re trame
     long        stateSaveAt   = -1;       // --state-save : après la trame N
     const char* stateSavePath = nullptr;
@@ -284,6 +287,8 @@ int main(int argc, char** argv)
             forceGg = true;
         } else if (std::strcmp(a, "--no-sprite-limit") == 0) {
             noSpriteLimit = true;
+        } else if (std::strcmp(a, "--eeprom") == 0) {
+            eeprom = true;
         } else if (std::strcmp(a, "--rewind-check") == 0) {
             rewindCheck = true;
         } else if (std::strcmp(a, "--gun") == 0) {
@@ -324,6 +329,7 @@ int main(int argc, char** argv)
     // Persistance .sav opt-in seulement : un .sav qui traîne changerait les
     // traces, et le headless est l'outil de validation déterministe.
     machine.cart.savEnabled = sav;
+    machine.cart.eepromEnabled = eeprom;
     if (!biosPath && looksLikeBios(romPath)) {
         biosPath = romPath;
         romPath  = nullptr;

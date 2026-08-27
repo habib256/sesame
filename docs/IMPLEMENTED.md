@@ -114,6 +114,16 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
 - Mapper coréen : page de la fenêtre 2 par écriture à 0xA000 ; détection
   heuristique à l'exécution (écriture à 0xA000 alors que les registres
   Sega n'ont jamais été touchés), type sérialisé dans les save-states (v3)
+- Mapper Janggun (heuristique : écriture à 0x6000) : quatre fenêtres de
+  8 Ko sur 0x4000-0xBFFF (registres aux adresses 0x4000/0x6000/0x8000/
+  0xA000, paires 16 Ko par 0xFFFE/0xFFFF), bit 6 d'une page = lecture à
+  octets MIROIRS (bits inversés)
+- EEPROM série 93C46 (cartouches de baseball) : protocole Microwire
+  complet (READ avec 0 factice, WRITE, ERASE, EWEN/EWDS, ERAL/WRAL) sur la
+  fenêtre 0x8000-0xBFFF (écriture = DI/CLK/CS bits 0-2, lecture = DO
+  bit 0) ; 64 mots de 16 bits persistés dans `<rom>.eeprom`. Pas
+  d'en-tête détectable : activation par `eeprom` (sesame.cfg) ou
+  `--eeprom` (headless) ; état sérialisé (save-states v6)
 - RAM cartouche 2×16 Ko (bit3/bit2 de 0xFFFC), persistée en `<rom>.sav`
   (GUI : toujours, avec sauvegarde périodique ~5 s ; headless : opt-in
   `--sav` pour préserver le déterminisme des traces)

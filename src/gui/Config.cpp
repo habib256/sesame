@@ -95,6 +95,7 @@ bool Config::load(const std::string& p) {
         else if (key == "no_sprite_limit") noSpriteLimit = parseBool(val, noSpriteLimit);
         else if (key == "light_phaser")    lightPhaser = parseBool(val, lightPhaser);
         else if (key == "rewind")          rewind = parseBool(val, rewind);
+        else if (key == "eeprom")          eeprom = parseBool(val, eeprom);
         else if (key == "rewind_seconds")  rewindSeconds = parseInt(val, rewindSeconds);
         else if (key == "lcd_persistence") lcdPersistence = parseFloat(val, lcdPersistence);
         else if (key == "lcd_grid_strength")
@@ -151,6 +152,8 @@ bool Config::save() const {
       << "no_sprite_limit = " << (noSpriteLimit ? "true" : "false") << "\n"
       << "# light_phaser: mouse aims the Light Phaser (port A), click = trigger\n"
       << "light_phaser = " << (lightPhaser ? "true" : "false") << "\n"
+      << "# eeprom: map a 93C46 serial EEPROM at 0x8000 (baseball cartridges)\n"
+      << "eeprom = " << (eeprom ? "true" : "false") << "\n"
       << "# rewind: hold Backspace to rewind time (rewind_seconds of history,\n"
       << "#         about 5.5 MB of RAM per second)\n"
       << "rewind = " << (rewind ? "true" : "false") << "\n"

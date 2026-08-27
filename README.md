@@ -23,8 +23,9 @@ the GUI; the `Bus` class *is* the memory map.
 - Game Gear mode (auto-detected from `.gg`): 12-bit palette, 160x144
   cropped display, Start button, per-channel stereo panning, GG-specific
   ports, and an LCD look (pixel grid + ghosting) replacing the CRT filter
-- Sega, Codemasters (auto-detected, incl. Ernie Els RAM) and Korean
-  mappers; `.sms`/`.gg` ROM loading (512-byte dumper headers tolerated)
+- Sega, Codemasters (auto-detected, incl. Ernie Els RAM), Korean and
+  Janggun (mirrored-byte pages) mappers, plus 93C46 serial EEPROM
+  (`eeprom = true`); `.sms`/`.gg` ROM loading (512-byte headers tolerated)
 - Two controllers, Pause (NMI), Reset; Light Phaser emulated with the
   mouse (`light_phaser = true` in sesame.cfg, left click = trigger)
 - BIOS slot with real memory-control port (`$3E`): boots BIOS images and

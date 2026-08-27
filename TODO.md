@@ -87,8 +87,13 @@ et contraintes de licence détaillées là-bas).
       coréen (page fenêtre 2 par 0xA000, heuristique gardée par « registres
       Sega jamais écrits ») — ROMs de test `cmtest.sms`/`krtest.sms` dans
       la suite (23 checks), état v3 (2026-08)
-- [ ] Mappers restants : Janggun (8 Ko, octets miroirs), [R] EEPROM 93C46
-      (cartouches de baseball, sauvegarde des stats)
+- [x] Mapper Janggun : 4 fenêtres de 8 Ko (regs 0x4000/0x6000/0x8000/
+      0xA000, paires 16 Ko via 0xFFFE/0xFFFF), pages à octets MIROIRS
+      (bit 6), heuristique 0x6000 ; [R] EEPROM 93C46 : Microwire complet
+      (READ/WRITE/ERASE/EWEN/EWDS/ERAL/WRAL), fenêtre 0x8000 (DI/CLK/CS,
+      DO), persistée en <rom>.eeprom — activation par `eeprom` (cfg) /
+      `--eeprom` (pas d'en-tête détectable). ROMs jgtest/eetest dans la
+      suite (32 checks), état v6 (2026-08)
 - [x] Sauvegarde RAM cartouche sur disque (.sav — GUI toujours, headless
       opt-in via --sav pour rester déterministe, 2026-08)
 

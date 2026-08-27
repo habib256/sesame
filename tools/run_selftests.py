@@ -201,12 +201,14 @@ def main():
         capture_output=True, text=True)
     if check('generate mapper test ROMs', gen.returncode == 0,
              gen.stderr.strip() or gen.stdout.strip()):
-        for rom_name, verdicts in (
-                ('cmtest.sms', ['CM1 OK', 'CM2 OK', 'CM3 OK', 'CM4 OK']),
-                ('krtest.sms', ['KR1 OK'])):
+        for rom_name, verdicts, extra in (
+                ('cmtest.sms', ['CM1 OK', 'CM2 OK', 'CM3 OK', 'CM4 OK'], []),
+                ('krtest.sms', ['KR1 OK'], []),
+                ('jgtest.sms', ['JG1 OK', 'JG2 OK', 'JG3 OK'], []),
+                ('eetest.sms', ['EE1 OK'], ['--eeprom'])):
             run = subprocess.run(
                 [str(HEADLESS), str(ROOT / 'roms' / rom_name),
-                 '--frames', '10', '--sdsc'],
+                 '--frames', '10', '--sdsc'] + extra,
                 capture_output=True, text=True, timeout=120, cwd=ROOT)
             for verdict in verdicts:
                 check(f'{rom_name} reports "{verdict}"', verdict in run.stdout)

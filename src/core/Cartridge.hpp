@@ -29,7 +29,7 @@ class StateIO;
 
 class Cartridge {
 public:
-    enum class Mapper : u8 { Sega, Codemasters, Korean };
+    enum class Mapper : u8 { Sega, Codemasters, Korean, Janggun };
 
     // Charge un fichier .sms ; tolère l'en-tête parasite de 512 octets des
     // vieux dumpers (taille % 0x4000 == 512). Retourne false si échec.
@@ -63,11 +63,23 @@ public:
     // slot BIOS de Machine la désactive toujours.
     bool savEnabled = true;
 
+    // EEPROM série 93C46 (cartouches de baseball) : à activer AVANT load()
+    // (pas d'en-tête pour la détecter — clé `eeprom` de sesame.cfg,
+    // --eeprom au headless). Mappée sur 0x8000-0xBFFF : écriture = lignes
+    // DI/CLK/CS (bits 0-2), lecture = ligne DO (bit 0). 64 mots de 16 bits
+    // persistés dans <rom>.eeprom quand savEnabled l'est aussi.
+    bool eepromEnabled = false;
+
     std::vector<u8> rom;
 
 private:
     Mapper mapperType = Mapper::Sega;
     u8 pageReg[3]{};      // pages ROM sélectionnées pour les 3 fenêtres
+    // Janggun : quatre fenêtres de 8 Ko sur 0x4000-0xBFFF (registres aux
+    // adresses 0x4000/0x6000/0x8000/0xA000 ; 0xFFFE/0xFFFF posent les
+    // paires 16 Ko). Bit 6 d'une page = lecture à OCTETS MIROIRS
+    // (bits inversés — particularité de cette cartouche).
+    u8 pageReg8[4]{};
     u8 ramControl = 0;    // registre 0xFFFC (Sega)
     u8 cartRam[2][0x4000]{};  // 2 banques de RAM de sauvegarde possibles (Sega)
     bool cmRamEnabled = false;   // Codemasters : RAM 8 Ko sur 0xA000-0xBFFF
@@ -76,4 +88,24 @@ private:
     int romMask = 0;      // masque de page (nombre de pages arrondi puissance de 2)
     std::string savePath;     // <rom sans extension>.sav
     bool saveRamDirty = false;
+
+    // --- État Microwire de la 93C46 -----------------------------------------
+    struct Eeprom {
+        u16 data[64]{};
+        u8  phase = 0;         // 0 = attente start, 1 = commande, 2 = données
+                               // entrantes, 3 = données sortantes
+        u16 shiftIn = 0;
+        int bits = 0;
+        u8  op = 0, addr = 0;
+        bool wral = false;     // écriture globale en cours (WRAL)
+        u16 shiftOut = 0;
+        int outBits = 0;
+        bool writeEnabled = false;
+        bool doLine = true;    // ligne DO (1 = prêt/repos)
+        bool prevClk = false, cs = false;
+    } ee;
+    bool eeDirty = false;
+    std::string eePath;        // <rom sans extension>.eeprom
+    void eeLines(u8 v);        // pose DI/CLK/CS et avance la machine à états
+    void eeClockIn(int di);    // un front montant d'horloge, CS haut
 };
