@@ -11,9 +11,11 @@ the GUI; the `Bus` class *is* the memory map.
 - Full Z80 core (documented + undocumented opcodes, standard cycle counts)
 - VDP 315-5124, mode 4: background scrolling, sprites, line & VBlank interrupts
 - NTSC and PAL consoles (`--pal`: 313 lines, ~49.70 Hz, PAL CPU clock)
-- SN76489 PSG (3 square channels + noise), 44.1 kHz band-limited output
+- SN76489 PSG (3 square channels + noise), 44.1 kHz band-limited stereo
+  output
 - Game Gear mode (auto-detected from `.gg`): 12-bit palette, 160x144
-  cropped display, Start button, GG-specific ports
+  cropped display, Start button, per-channel stereo panning, GG-specific
+  ports
 - Standard Sega mapper, `.sms`/`.gg` ROM loading (512-byte dumper headers
   tolerated)
 - Two controllers, Pause (NMI), Reset

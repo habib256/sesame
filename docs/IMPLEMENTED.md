@@ -25,7 +25,9 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
 ## PSG SN76489 (`src/core/Psg.cpp`)
 - 3 canaux carrés + bruit (LFSR Sega 16 bits, blanc/périodique)
 - Période 0/1 = niveau constant (lecture de samples)
-- Sortie 44,1 kHz mono s16 via anneau ; table de volumes 2 dB
+- Sortie 44,1 kHz s16 via anneau, en TRAMES STÉRÉO entrelacées (G,D) :
+  panning Game Gear (registre 0x06) appliqué par voie dans la synthèse ;
+  en SMS les deux voies sont identiques. Table de volumes 2 dB
 - Rééchantillonnage par synthèse à bande limitée (façon Blip Buffer de
   Blargg, réimplémentation maison GPL) : marches band-limited pré-calculées
   (64 phases × 16 coefficients, `tools/make_blip_table.py` →
@@ -44,7 +46,7 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
 - Ports 0x00-0x06 (soustraits à la règle pair/impair 0x3E/0x3F) :
   0x00 = Start (actif bas, `Io::Button::Start`, touche Entrée/Select au
   GUI) + région export NTSC ; 0x01-0x05 = EXT/série non connectés ;
-  0x06 = stéréo PSG (mémorisé, sortie encore mono — TODO)
+  0x06 = stéréo PSG (panning par canal appliqué à la sortie)
 - Pas de NMI Pause (`Machine::pressPause` sans effet en Game Gear)
 
 ## Mapper / cartouche (`src/core/Cartridge.cpp`)

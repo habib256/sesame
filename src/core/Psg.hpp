@@ -8,8 +8,10 @@
 //  Psg — Texas Instruments SN76489 (variante Sega intégrée au VDP).
 //  3 canaux carrés + 1 canal bruit, atténuation 4 bits par canal.
 //  Horloge puce = horloge CPU (3 579 545 Hz) ; diviseur interne /16.
-//  Le cœur produit des échantillons s16 mono à kSampleRate dans un anneau
-//  que le frontend vient vider (GUI : audio temps réel ; headless : WAV).
+//  Le cœur produit des TRAMES STÉRÉO s16 entrelacées (G,D) à kSampleRate
+//  dans un anneau que le frontend vide (GUI : temps réel ; headless : WAV).
+//  Le panning Game Gear (registre 0x06) route chaque canal vers la gauche
+//  et/ou la droite ; en SMS les deux voies sont identiques (mono dupliqué).
 //  Rééchantillonnage par synthèse à bande limitée (voir Psg.cpp).
 // =============================================================================
 #include "Types.hpp"
@@ -28,17 +30,17 @@ public:
     void write(u8 v);
 
     // Game Gear : registre stéréo (port 0x06) — bit n = canal n vers la
-    // DROITE, bit n+4 = canal n vers la GAUCHE. Mémorisé seulement : la
-    // sortie v1 reste mono (équivalent du haut-parleur interne, qui somme
-    // les deux voies). TODO : sortie stéréo réelle (casque).
+    // DROITE, bit n+4 = canal n vers la GAUCHE. Appliqué à la synthèse au
+    // tick suivant (~4,5 µs), comme les écritures de volume.
     void writeStereo(u8 v) { stereoMask = v; }
 
     // Avance l'horloge du nombre de cycles CPU écoulés et pousse les
     // échantillons produits dans l'anneau interne.
     void runCycles(int cpuCycles);
 
-    // Vide jusqu'à `max` échantillons dans `out`, retourne le nombre écrit.
-    int readSamples(s16* out, int max);
+    // Vide jusqu'à `maxFrames` trames stéréo dans `out` (2 s16 par trame,
+    // gauche puis droite), retourne le nombre de TRAMES écrites.
+    int readSamples(s16* out, int maxFrames);
 
 private:
     // Détails (compteurs de tonalité, LFSR de bruit, accumulateur de
@@ -51,9 +53,9 @@ private:
     u16 toneReg[4]{};      // 3 tonalités + contrôle bruit
     u8  volume[4]{};       // atténuations (0xF = silence)
 
-    static constexpr int kRingSize = 8192;
-    s16 ring[kRingSize]{};
-    int ringR = 0, ringW = 0;
+    static constexpr int kRingFrames = 8192;   // trames stéréo (~185 ms)
+    s16 ring[kRingFrames * 2]{};               // entrelacé G,D
+    int ringR = 0, ringW = 0;                  // indices en TRAMES
 
     s16 toneCounter[4]{};
     u8  toneOut[4]{};
@@ -66,15 +68,15 @@ private:
     // fractionnaire entier ; les transitions d'amplitude passent par une
     // synthèse à bande limitée (deltas + intégration, voir Psg.cpp).
     u32 resampleAcc = 0;
-    u64 sampleIndex = 0;   // index absolu du prochain échantillon de sortie
-    s16 lastAmp     = 0;   // dernière amplitude mixée vue par la synthèse
-    s32 blipSum     = 0;   // intégrateur de sortie (point fixe kBlipScaleBits)
+    u64 sampleIndex = 0;    // index absolu du prochain échantillon de sortie
+    s16 lastAmp[2]{};       // dernières amplitudes mixées (gauche, droite)
+    s32 blipSum[2]{};       // intégrateurs de sortie (point fixe kBlipScaleBits)
     static constexpr int kBlipBufSize = 32;  // > kBlipTaps + 1, puissance de 2
-    s32 blipBuf[kBlipBufSize]{};             // anneau de deltas par échantillon
+    s32 blipBuf[2][kBlipBufSize]{};          // anneaux de deltas par voie
 
-    void tick();             // un pas d'horloge PSG (16 cycles CPU)
-    s16  mix() const;        // sortie mixée instantanée des 4 canaux
-    void addDelta(int delta);   // dépose une transition à la position courante
-    void finalizeSample();      // intègre et pousse l'échantillon terminé
-    void pushSample(s16 s);  // pousse dans l'anneau (écrase si plein)
+    void tick();               // un pas d'horloge PSG (16 cycles CPU)
+    s16  mixSide(int side) const;  // sortie mixée d'une voie (0 = G, 1 = D)
+    void addDelta(int side, int delta);  // transition à la position courante
+    void finalizeSample();     // intègre les deux voies et pousse la trame
+    void pushFrame(s16 l, s16 r);  // pousse dans l'anneau (écrase si plein)
 };

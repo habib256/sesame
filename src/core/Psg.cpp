@@ -66,10 +66,12 @@ void Psg::reset() {
     clockAcc    = 0;
     resampleAcc = 0;
     sampleIndex = 0;
-    lastAmp     = 0;  // = mix() après reset (tous les volumes à silence)
-    blipSum     = 0;
-    for (int i = 0; i < kBlipBufSize; ++i)
-        blipBuf[i] = 0;
+    for (int s = 0; s < 2; ++s) {
+        lastAmp[s] = 0;  // = mixSide() après reset (volumes à silence)
+        blipSum[s] = 0;
+        for (int i = 0; i < kBlipBufSize; ++i)
+            blipBuf[s][i] = 0;
+    }
     ringR = ringW = 0;
 }
 
@@ -148,53 +150,63 @@ void Psg::tick() {
     }
 }
 
-// Sortie mixée instantanée : somme unipolaire des 4 canaux.
-s16 Psg::mix() const {
+// Sortie mixée instantanée d'une voie : somme unipolaire des canaux routés
+// vers ce côté par le registre stéréo Game Gear (bits 0-3 = droite,
+// bits 4-7 = gauche). En SMS le masque reste à 0xFF : les deux voies sont
+// identiques, la sortie est un mono dupliqué.
+s16 Psg::mixSide(int side) const {
+    const int shift = (side == 0) ? 4 : 0;  // gauche : bits hauts
     int sum = 0;
     for (int ch = 0; ch < 3; ++ch)
-        if (toneOut[ch])
+        if (toneOut[ch] && (stereoMask & (1 << (ch + shift))))
             sum += kVolumeTable[volume[ch]];
-    if (noiseLfsr & 1)  // la sortie du bruit est le bit 0 du LFSR
+    if ((noiseLfsr & 1) && (stereoMask & (1 << (3 + shift))))
         sum += kVolumeTable[volume[3]];
     return (s16)sum;  // max 4 * 8000 = 32000 < 32767
 }
 
-// Pousse un échantillon dans l'anneau. S'il est plein (le frontend ne vide
-// pas assez vite), on écrase le PLUS ANCIEN : perdre du vieux son vaut mieux
-// que bloquer l'émulation ou dériver.
-void Psg::pushSample(s16 s) {
-    int next = (ringW + 1) % kRingSize;
+// Pousse une trame stéréo dans l'anneau. S'il est plein (le frontend ne
+// vide pas assez vite), on écrase la PLUS ANCIENNE : perdre du vieux son
+// vaut mieux que bloquer l'émulation ou dériver.
+void Psg::pushFrame(s16 l, s16 r) {
+    int next = (ringW + 1) % kRingFrames;
     if (next == ringR)
-        ringR = (ringR + 1) % kRingSize;  // écrasement du plus ancien
-    ring[ringW] = s;
+        ringR = (ringR + 1) % kRingFrames;  // écrasement du plus ancien
+    ring[ringW * 2]     = l;
+    ring[ringW * 2 + 1] = r;
     ringW = next;
 }
 
-// Dépose une transition d'amplitude à la position temporelle courante :
-// échantillon sampleIndex + resampleAcc/cpuClock. La marche s'étale sur les
-// kBlipTaps échantillons À VENIR (front centré au milieu — le son sort avec
-// kBlipTaps/2 échantillons de retard fixe, ~0,18 ms, imperceptible).
-void Psg::addDelta(int delta) {
+// Dépose une transition d'amplitude d'une voie à la position temporelle
+// courante : échantillon sampleIndex + resampleAcc/cpuClock. La marche
+// s'étale sur les kBlipTaps échantillons À VENIR (front centré au milieu —
+// le son sort avec kBlipTaps/2 échantillons de retard fixe, ~0,18 ms,
+// imperceptible).
+void Psg::addDelta(int side, int delta) {
     // Phase sous-échantillon du front, quantifiée sur kBlipPhases pas.
     int phase = (int)(((u64)resampleAcc * kBlipPhases) / (u32)cpuClock);
     for (int t = 0; t < kBlipTaps; ++t)
-        blipBuf[(sampleIndex + (u64)t) & (kBlipBufSize - 1)] +=
+        blipBuf[side][(sampleIndex + (u64)t) & (kBlipBufSize - 1)] +=
             delta * kBlipStep[phase][t];
 }
 
 // L'échantillon sampleIndex vient d'être dépassé : plus aucune transition
 // future ne peut le toucher (elles écrivent à partir de sampleIndex + 1).
-// On intègre son delta, on libère la case, et on émet.
+// On intègre les deltas des deux voies, on libère les cases, et on émet.
 void Psg::finalizeSample() {
-    int slot = (int)(sampleIndex & (kBlipBufSize - 1));
-    blipSum += blipBuf[slot];
-    blipBuf[slot] = 0;
-    // Point fixe -> s16, arrondi au plus proche ; l'ondulation de Gibbs
-    // peut dépasser transitoirement l'amplitude nominale, d'où l'écrêtage.
-    s32 v = (blipSum + (1 << (kBlipScaleBits - 1))) >> kBlipScaleBits;
-    if (v < -32768) v = -32768;
-    if (v > 32767)  v = 32767;
-    pushSample((s16)v);
+    const int slot = (int)(sampleIndex & (kBlipBufSize - 1));
+    s16 out[2];
+    for (int s = 0; s < 2; ++s) {
+        blipSum[s] += blipBuf[s][slot];
+        blipBuf[s][slot] = 0;
+        // Point fixe -> s16, arrondi au plus proche ; l'ondulation de Gibbs
+        // peut dépasser transitoirement l'amplitude nominale, d'où l'écrêtage.
+        s32 v = (blipSum[s] + (1 << (kBlipScaleBits - 1))) >> kBlipScaleBits;
+        if (v < -32768) v = -32768;
+        if (v > 32767)  v = 32767;
+        out[s] = (s16)v;
+    }
+    pushFrame(out[0], out[1]);
 }
 
 void Psg::runCycles(int cpuCycles) {
@@ -204,11 +216,13 @@ void Psg::runCycles(int cpuCycles) {
         tick();
 
         // Seules les TRANSITIONS alimentent la synthèse : tant que la
-        // sortie mixée ne change pas, il n'y a rien à déposer.
-        s16 amp = mix();
-        if (amp != lastAmp) {
-            addDelta(amp - lastAmp);
-            lastAmp = amp;
+        // sortie mixée d'une voie ne change pas, il n'y a rien à déposer.
+        for (int s = 0; s < 2; ++s) {
+            s16 amp = mixSide(s);
+            if (amp != lastAmp[s]) {
+                addDelta(s, amp - lastAmp[s]);
+                lastAmp[s] = amp;
+            }
         }
 
         // Cadence de sortie ticks (~223,7 kHz NTSC / ~221,7 kHz PAL) ->
@@ -224,11 +238,13 @@ void Psg::runCycles(int cpuCycles) {
     }
 }
 
-int Psg::readSamples(s16* out, int max) {
+int Psg::readSamples(s16* out, int maxFrames) {
     int n = 0;
-    while (n < max && ringR != ringW) {
-        out[n++] = ring[ringR];
-        ringR = (ringR + 1) % kRingSize;
+    while (n < maxFrames && ringR != ringW) {
+        out[n * 2]     = ring[ringR * 2];
+        out[n * 2 + 1] = ring[ringR * 2 + 1];
+        ringR = (ringR + 1) % kRingFrames;
+        ++n;
     }
     return n;
 }

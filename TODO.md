@@ -39,10 +39,12 @@ et contraintes de licence détaillées là-bas).
       par mot (latch pair/impair), fenêtre 160x144 recadrée dans les deux
       frontends (GUI 10:9, PPM headless), ports 0x00-0x06 (Start actif bas,
       EXT/série stub, stéréo PSG mémorisée), pas de NMI Pause (2026-08)
-- [ ] Game Gear, suite : sortie audio STÉRÉO réelle (le registre 0x06 est
-      mémorisé mais la sortie reste mono), mode compatibilité SMS-sur-GG
-      (cartouche .sms via adaptateur : palette réduite), shader LCD
-      (rémanence/ghosting de la dalle d'origine)
+- [x] Game Gear, stéréo : chaîne audio en trames stéréo entrelacées de bout
+      en bout (PSG par voie selon le registre 0x06, CoreAudio 2 canaux,
+      WAV stéréo ; en SMS les deux voies sont identiques) (2026-08)
+- [ ] Game Gear, suite : mode compatibilité SMS-sur-GG (cartouche .sms via
+      adaptateur : palette réduite), shader LCD (rémanence/ghosting de la
+      dalle d'origine)
 - [ ] Mappers exotiques (Codemasters, Korean/Janggun) ; [R] EEPROM 93C46
       (cartouches de baseball, sauvegarde des stats)
 - [x] Sauvegarde RAM cartouche sur disque (.sav — GUI toujours, headless

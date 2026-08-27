@@ -43,7 +43,8 @@ void printUsage(FILE* out)
         "  --sdsc                enable the SDSC debug console (ports 0xFC/0xFD)\n"
         "  --exit-sdsc TEXT      stop as soon as the SDSC output contains TEXT\n"
         "                        (implies --sdsc; for test harnesses)\n"
-        "  --wav FILE            record PSG audio (44100 Hz mono s16 WAV)\n"
+        "  --wav FILE            record PSG audio (44100 Hz stereo s16 WAV;\n"
+        "                        both channels identical on SMS, panned on GG)\n"
         "  --pause-at N          press the Pause button (NMI) at frame N\n"
         "  --help                show this help and exit\n");
 }
@@ -83,7 +84,8 @@ bool writePpm(const char* path, const u32* fb, Model model)
 }
 
 // -----------------------------------------------------------------------------
-//  En-tête WAV écrit à la main : RIFF/WAVE, fmt PCM 16 bits mono 44100 Hz.
+//  En-tête WAV écrit à la main : RIFF/WAVE, fmt PCM 16 bits STÉRÉO 44100 Hz
+//  (trames entrelacées G,D du PSG — identiques en SMS, pannées en Game Gear).
 //  Les tailles sont bouchées à zéro puis corrigées à la fin (via fseek).
 // -----------------------------------------------------------------------------
 void writeU32le(FILE* f, u32 v)
@@ -109,7 +111,7 @@ void writeU16le(FILE* f, u16 v)
 void writeWavHeader(FILE* f, u32 dataBytes)
 {
     const u32 sampleRate = Psg::kSampleRate;
-    const u16 channels   = 1;
+    const u16 channels   = 2;
     const u16 bitsPerSmp = 16;
     const u16 blockAlign = channels * bitsPerSmp / 8;
     const u32 byteRate   = sampleRate * blockAlign;
@@ -364,12 +366,13 @@ int main(int argc, char** argv)
         }
 
         // Vidange de l'anneau audio du PSG vers le WAV (évite la saturation).
+        // readSamples() compte en TRAMES stéréo : 2 s16 écrits par trame.
         if (wavFile) {
             int n;
             while ((n = machine.psg.readSamples(audioBuf.data(),
-                                                static_cast<int>(audioBuf.size()))) > 0) {
-                writeSamplesLe(wavFile, audioBuf.data(), n);
-                wavDataBytes += static_cast<u32>(n) * 2;
+                                                static_cast<int>(audioBuf.size() / 2))) > 0) {
+                writeSamplesLe(wavFile, audioBuf.data(), n * 2);
+                wavDataBytes += static_cast<u32>(n) * 4;
             }
         }
 

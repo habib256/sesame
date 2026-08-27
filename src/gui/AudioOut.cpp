@@ -17,17 +17,18 @@
 
 #include <cstring>
 
-void AudioOut::push(const s16* smp, int n) {
+void AudioOut::push(const s16* frames, int n) {
     std::lock_guard<std::mutex> lock(mtx);
     for (int i = 0; i < n; ++i) {
-        if (count == kRingSize) {
+        if (count == kRingFrames) {
             // Trop-plein (l'émulation va un poil plus vite que 44100 Hz réels) :
             // on écrase le plus vieux pour garder la latence bornée.
-            ringR = (ringR + 1) % kRingSize;
+            ringR = (ringR + 1) % kRingFrames;
             --count;
         }
-        ring[ringW] = smp[i];
-        ringW = (ringW + 1) % kRingSize;
+        ring[ringW * 2]     = frames[i * 2];
+        ring[ringW * 2 + 1] = frames[i * 2 + 1];
+        ringW = (ringW + 1) % kRingFrames;
         ++count;
     }
 }
@@ -36,25 +37,28 @@ void AudioOut::pull(s16* out, int max) {
     std::lock_guard<std::mutex> lock(mtx);
     int n = (count < max) ? count : max;
     for (int i = 0; i < n; ++i) {
-        out[i] = ring[ringR];
-        ringR = (ringR + 1) % kRingSize;
+        out[i * 2]     = ring[ringR * 2];
+        out[i * 2 + 1] = ring[ringR * 2 + 1];
+        ringR = (ringR + 1) % kRingFrames;
     }
     count -= n;
     if (n < max)
-        std::memset(out + n, 0, static_cast<size_t>(max - n) * sizeof(s16));
+        std::memset(out + n * 2, 0,
+                    static_cast<size_t>(max - n) * 2 * sizeof(s16));
 }
 
 #ifdef __APPLE__
 
 namespace {
-constexpr int kBufferSamples = 512;  // ~11,6 ms par tampon à 44100 Hz
-constexpr int kBufferCount   = 4;
+constexpr int kBufferFrames = 512;   // ~11,6 ms par tampon à 44100 Hz
+constexpr int kBufferCount  = 4;
+constexpr int kBufferBytes  = kBufferFrames * 2 * sizeof(s16);  // stéréo
 }  // namespace
 
 void AudioOut::queueCallback(void* user, AudioQueueRef q, AudioQueueBufferRef buf) {
     auto* self = static_cast<AudioOut*>(user);
-    self->pull(static_cast<s16*>(buf->mAudioData), kBufferSamples);
-    buf->mAudioDataByteSize = kBufferSamples * sizeof(s16);
+    self->pull(static_cast<s16*>(buf->mAudioData), kBufferFrames);
+    buf->mAudioDataByteSize = kBufferBytes;
     AudioQueueEnqueueBuffer(q, buf, 0, nullptr);
 }
 
@@ -65,10 +69,10 @@ bool AudioOut::start() {
     desc.mFormatFlags      = kLinearPCMFormatFlagIsSignedInteger |
                              kLinearPCMFormatFlagIsPacked;
     desc.mBitsPerChannel   = 16;
-    desc.mChannelsPerFrame = 1;
-    desc.mBytesPerFrame    = 2;
+    desc.mChannelsPerFrame = 2;
+    desc.mBytesPerFrame    = 4;
     desc.mFramesPerPacket  = 1;
-    desc.mBytesPerPacket   = 2;
+    desc.mBytesPerPacket   = 4;
 
     if (AudioQueueNewOutput(&desc, queueCallback, this, nullptr, nullptr, 0,
                             &queue) != noErr) {
@@ -80,13 +84,12 @@ bool AudioOut::start() {
     // relais dès que la file tourne.
     for (int i = 0; i < kBufferCount; ++i) {
         AudioQueueBufferRef buf = nullptr;
-        if (AudioQueueAllocateBuffer(queue, kBufferSamples * sizeof(s16), &buf)
-                != noErr) {
+        if (AudioQueueAllocateBuffer(queue, kBufferBytes, &buf) != noErr) {
             stop();
             return false;
         }
-        std::memset(buf->mAudioData, 0, kBufferSamples * sizeof(s16));
-        buf->mAudioDataByteSize = kBufferSamples * sizeof(s16);
+        std::memset(buf->mAudioData, 0, kBufferBytes);
+        buf->mAudioDataByteSize = kBufferBytes;
         AudioQueueEnqueueBuffer(queue, buf, 0, nullptr);
     }
 

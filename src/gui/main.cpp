@@ -481,11 +481,12 @@ int main(int argc, char** argv)
 
                 // Vidange de l'anneau du PSG vers la sortie audio (ou dans le
                 // vide si aucun backend : il ne faut pas le laisser saturer).
+                // Trames stéréo : 2 s16 par trame dans audioScratch.
                 int n;
                 while ((n = machine.psg.readSamples(
                             audioScratch,
                             static_cast<int>(sizeof(audioScratch) /
-                                             sizeof(audioScratch[0])))) > 0) {
+                                             sizeof(audioScratch[0]) / 2))) > 0) {
                     if (audioOn)
                         audio.push(audioScratch, n);
                 }
