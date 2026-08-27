@@ -20,6 +20,7 @@
 
 void Io::reset() {
     pad[0] = pad[1] = 0;  // manettes relâchées
+    thInput[0] = thInput[1] = true;  // aucun périphérique ne tire TH
     ioControl  = 0xFF;    // toutes les broches en entrée, niveaux hauts
     sdscText.clear();     // le journal SDSC repart de zéro
     // sdscEnabled est un réglage du frontend : il survit au reset.
@@ -48,15 +49,27 @@ u8 Io::readPort(u8 port) {
     // (réf. SMS Power!) : bit1/bit3 = direction TH port A/B (1 = entrée),
     // bit5/bit7 = niveau de sortie TH port A/B. Sur une console export,
     // une TH configurée en SORTIE relit la valeur écrite ; en ENTRÉE elle
-    // lit 1 (aucun périphérique ne pilote la broche). C'est le test de
+    // lit le niveau poussé par le périphérique (1 sans rien de branché,
+    // 0 quand le Light Phaser voit le faisceau). C'est aussi le test de
     // région classique des jeux ($F5 puis $55 sur 0x3F).
     // NB : les bits 0/2 et 4/6 de 0x3F concernent les broches TR, sans
     // effet sur 0xDD.
-    if (!(ioControl & 0x02) && !(ioControl & 0x20))
-        r &= (u8)~0x40;  // TH A en sortie, niveau bas
-    if (!(ioControl & 0x08) && !(ioControl & 0x80))
-        r &= (u8)~0x80;  // TH B en sortie, niveau bas
+    if (ioControl & 0x02) {
+        if (!thInput[0]) r &= (u8)~0x40;   // TH A en entrée : niveau du périph.
+    } else if (!(ioControl & 0x20)) {
+        r &= (u8)~0x40;                    // TH A en sortie, niveau bas
+    }
+    if (ioControl & 0x08) {
+        if (!thInput[1]) r &= (u8)~0x80;   // TH B en entrée
+    } else if (!(ioControl & 0x80)) {
+        r &= (u8)~0x80;                    // TH B en sortie, niveau bas
+    }
     return r;
+}
+
+void Io::setThLevel(int port, bool level) {
+    if (port == 0 || port == 1)
+        thInput[port] = level;
 }
 
 u8 Io::readGgPort(u8 port) {

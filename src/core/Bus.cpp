@@ -93,8 +93,18 @@ void Bus::ioWrite(u8 port, u8 v) {
             if (port == 0x06) psg->writeStereo(v);
             return;
         }
-        if (port & 1) io->writeIoControl(v);
-        else          memControl = v;  // 0x3E : sélection des médias
+        if (port & 1) {
+            // Écriture du contrôle E/S 0x3F : un front sur une broche TH
+            // (direction OU niveau de sortie) latche le HCounter — c'est le
+            // mécanisme que le Light Phaser exploite côté matériel.
+            const u8 old = io->ioControlValue();
+            io->writeIoControl(v);
+            // Bits TH du registre : 1/3 = directions, 5/7 = niveaux (0xAA).
+            if ((old ^ v) & 0xAA)
+                vdp->latchHCounter(lineCycles);
+        } else {
+            memControl = v;  // 0x3E : sélection des médias
+        }
         return;
     case 0x40:
         psg->write(v);

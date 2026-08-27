@@ -52,6 +52,10 @@ public:
     u8   ioRead(u8 port);
     void ioWrite(u8 port, u8 v);
 
+    // Position CPU dans la ligne courante (0..227), poussée par Machine à
+    // chaque instruction — sert au latch du HCounter sur front TH.
+    int lineCycles = 0;
+
     u8 ram[0x2000]{};
 
 private:

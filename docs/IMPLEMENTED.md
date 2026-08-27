@@ -23,7 +23,14 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
 - Sprites 8×8 et 8×16, limite 8/ligne (overflow), collision, early clock ;
   comparaison Y en 8 bits (un sprite à Y >= 0xF1 déborde en haut de l'écran)
 - Interruptions VBlank et ligne (reg 10), /INT en niveau
-- VCounter avec saut NTSC et PAL ; HCounter approximé (latch v1 simplifié)
+- VCounter avec saut NTSC et PAL ; HCounter réel : séquence
+  0x00-0x93/0xE9-0xFF calculée depuis la position CPU dans la ligne,
+  LATCHÉ sur front TH (écriture 0x3F, bits 1/3/5/7) et par le Light Phaser
+- Light Phaser (port A) : fenêtre de capteur ±2 lignes autour de la visée,
+  TH d'entrée relue sur 0xDD, HCounter figé à X/2 + 0x28 (convention des
+  jeux), gâchette = TL/bouton 1 ; souris + clic gauche au GUI
+  (`light_phaser` dans sesame.cfg), `--gun X Y` au headless. Approximation
+  documentée : la luminosité de l'écran n'est pas prise en compte
 - Modes TMS9918 hérités (M4=0) : Graphic I/II (tables motifs/couleurs avec
   masques de repli), texte 40 colonnes (encre/papier par reg7), multicolor
   (blocs 4×4) ; sprites TMS (SAT 4 octets, 4/ligne, drapeau 5S + numéro du

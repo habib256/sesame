@@ -90,12 +90,25 @@ void Machine::runFrame() {
         ym.runCycles(c);   // AVANT le PSG : il vient chercher la sortie FM
         psg.runCycles(c);
         lineCycles += c;
+        bus.lineCycles = lineCycles;   // pour le latch HCounter (front TH)
         while (lineCycles >= kCyclesPerLine) {
             lineCycles -= kCyclesPerLine;
             vdp.runLine();
             // Une interruption levée par cette ligne doit pouvoir être vue
             // par le CPU dès la prochaine instruction.
             cpu.setIrqLine(vdp.irqPending());
+
+            // Light Phaser : quand le faisceau passe dans la fenêtre du
+            // capteur (±2 lignes autour de la visée), la broche TH du
+            // port A tombe et le HCounter fige la position horizontale.
+            if (gunX >= 0) {
+                const int line = vdp.line();
+                const bool sees = line >= gunY - 2 && line <= gunY + 2;
+                io.setThLevel(0, !sees);
+                const int firstSeen = (gunY - 2 < 0) ? 0 : gunY - 2;
+                if (sees && line == firstSeen)
+                    vdp.latchHCounterForX(gunX);   // entrée dans la fenêtre
+            }
         }
     } while (!vdp.frameDone());
     frameCount++;

@@ -220,9 +220,28 @@ u8 Vdp::vCounter() const {
 }
 
 u8 Vdp::hCounter() const {
-    // v1 : latch simplifié — hLatch n'est jamais mis à jour, retourne 0.
-    // TODO : latcher la position horizontale sur les fronts TH (light gun).
+    // Retourne la valeur LATCHÉE (le port 0x7F ne suit pas le faisceau en
+    // continu : il fige la position au dernier front TH — light gun, ou
+    // écriture du contrôle E/S 0x3F qui bascule une broche TH).
     return hLatch;
+}
+
+// Latch du HCounter à partir de la position CPU dans la ligne (0..227).
+// Le compteur matériel suit les 342 pixels de la ligne, incrémenté un coup
+// sur deux : 171 valeurs, séquence 0x00-0x93 puis saut à 0xE9-0xFF
+// (réf. SMS Power!, « VDP - H-counter values »).
+void Vdp::latchHCounter(int cycleInLine) {
+    const int pixel = cycleInLine * 342 / 228;   // horloge pixel = 1,5x CPU
+    int hc = pixel >> 1;
+    if (hc > 0x93)
+        hc += 0xE9 - 0x94;                        // zone de retour ligne
+    hLatch = static_cast<u8>(hc);
+}
+
+// Latch pour le Light Phaser : les jeux convertissent la valeur lue en
+// position écran avec X = (HC - 0x28) * 2 — on fige donc l'inverse.
+void Vdp::latchHCounterForX(int screenX) {
+    hLatch = static_cast<u8>(((screenX & 0xFF) >> 1) + 0x28);
 }
 
 // -----------------------------------------------------------------------------

@@ -477,6 +477,10 @@ int main(int argc, char** argv)
         return p.substr(0, dot) + ".state";
     };
     bool f5WasDown = false, f7WasDown = false;
+    // Viewport de la trame précédente (letterbox) : sert à convertir la
+    // position souris en coordonnées écran SMS pour le Light Phaser.
+    int lastVx = 0, lastVy = 0, lastVw = 1, lastVh = 1;
+    int lastSrcW = Vdp::kWidth, lastSrcH = Vdp::kHeight;
 
     // --- Boucle principale ---------------------------------------------------
     while (!glfwWindowShouldClose(win)) {
@@ -599,6 +603,30 @@ int main(int argc, char** argv)
         } else {
             u8 p0 = static_cast<u8>(kbMask | gp0);
 
+            // Light Phaser : la souris vise (coordonnées écran via le
+            // letterbox de la trame précédente), le clic gauche presse la
+            // gâchette (TL = bouton 1 du port A). SMS uniquement.
+            if (cfg.lightPhaser && machine.model() == Model::Sms) {
+                double mx = 0, my = 0;
+                glfwGetCursorPos(win, &mx, &my);
+                int winW = 1, winH = 1;
+                glfwGetWindowSize(win, &winW, &winH);
+                int fbWNow = 1, fbHNow = 1;
+                glfwGetFramebufferSize(win, &fbWNow, &fbHNow);
+                // Souris en points -> pixels framebuffer (écrans Retina).
+                const double sxf = (mx * fbWNow / (winW > 0 ? winW : 1) - lastVx)
+                                   * lastSrcW / (lastVw > 0 ? lastVw : 1);
+                const double syf = (my * fbHNow / (winH > 0 ? winH : 1) - lastVy)
+                                   * lastSrcH / (lastVh > 0 ? lastVh : 1);
+                if (sxf >= 0 && sxf < lastSrcW && syf >= 0 && syf < lastSrcH)
+                    machine.setLightPhaser((int)sxf, (int)syf);
+                else
+                    machine.setLightPhaser(-1, -1);
+                if (glfwGetMouseButton(win, GLFW_MOUSE_BUTTON_LEFT) ==
+                    GLFW_PRESS)
+                    p0 |= Io::B1;   // gâchette
+            }
+
             // Entrée ou Select manette : Pause SMS (NMI sur FRONT) — ou
             // bouton Start de la Game Gear (simple NIVEAU lu sur le port
             // 0x00, les jeux GG s'en servent comme d'un bouton normal).
@@ -665,6 +693,8 @@ int main(int argc, char** argv)
         int vx, vy, vw, vh;
         computeViewport(fbW, fbH, gearGear ? 10.0 / 9.0 : 4.0 / 3.0,
                         vx, vy, vw, vh);
+        lastVx = vx; lastVy = vy; lastVw = vw; lastVh = vh;
+        lastSrcW = srcW; lastSrcH = srcH;
 
         // Passe CRT optionnelle : transforme la texture SMS brute en écran
         // « verre » rendu à la taille du viewport. En cas d'échec (FBO refusé),

@@ -31,6 +31,7 @@ struct Config {
     bool kiosk = false;           // kiosk
     int  kioskMonitor = 0;        // kiosk_monitor
     bool noSpriteLimit = false;   // no_sprite_limit (option pédagogique)
+    bool lightPhaser = false;     // light_phaser : souris = pistolet (port A)
     std::string romDir;           // rom_dir : dossier du menu borne, vide = auto
     CrtParams crtParams;          // crt_* (voir save() pour la liste)
 

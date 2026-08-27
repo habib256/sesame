@@ -92,6 +92,7 @@ bool Config::load(const std::string& p) {
         else if (key == "kiosk")           kiosk = parseBool(val, kiosk);
         else if (key == "kiosk_monitor")   kioskMonitor = parseInt(val, kioskMonitor);
         else if (key == "no_sprite_limit") noSpriteLimit = parseBool(val, noSpriteLimit);
+        else if (key == "light_phaser")    lightPhaser = parseBool(val, lightPhaser);
         else if (key == "rom_dir")         romDir = val;
         else if (key == "crt_brightness")  c.brightness = parseFloat(val, c.brightness);
         else if (key == "crt_contrast")    c.contrast = parseFloat(val, c.contrast);
@@ -141,6 +142,8 @@ bool Config::save() const {
       << "kiosk_monitor = " << kioskMonitor << "\n"
       << "# no_sprite_limit: remove the 8-sprites-per-line hardware limit\n"
       << "no_sprite_limit = " << (noSpriteLimit ? "true" : "false") << "\n"
+      << "# light_phaser: mouse aims the Light Phaser (port A), click = trigger\n"
+      << "light_phaser = " << (lightPhaser ? "true" : "false") << "\n"
       << "# rom_dir: game list folder for the in-game menu (empty = auto)\n"
       << "rom_dir = " << romDir << "\n"
          "\n"

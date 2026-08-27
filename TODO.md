@@ -18,7 +18,12 @@ et contraintes de licence détaillées là-bas).
       (17 checks) (2026-08)
 - [x] PAL (313 lignes, ~49,70 Hz) — cadence, horloge CPU/PSG 3 546 893 Hz,
       séquence VCounter (`--pal` dans les deux frontends, 2026-08)
-- [ ] HCounter réel + latch sur front TH (light gun)
+- [x] HCounter réel + latch sur front TH — séquence 0x00-0x93/0xE9-0xFF
+      depuis la position CPU dans la ligne, latch sur écriture 0x3F (bits
+      TH) et par le Light Phaser ; pistolet émulé (fenêtre de ±2 lignes,
+      TH d'entrée sur 0xDD, HC = X/2 + 0x28) — souris + clic au GUI
+      (`light_phaser` dans sesame.cfg), `--gun X Y` au headless, validé
+      par ROM de test sur trois visées (2026-08)
 - [x] Modes hérités TMS9918 pour les jeux SG-1000/F-16 — Graphic I/II,
       texte (40 col.), multicolor, sprites TMS (4/ligne, drapeau 5S +
       numéro, coïncidence, early clock, 16×16, MAG) ; couleurs CRAM

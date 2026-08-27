@@ -25,7 +25,8 @@ the GUI; the `Bus` class *is* the memory map.
   ports
 - Sega, Codemasters (auto-detected, incl. Ernie Els RAM) and Korean
   mappers; `.sms`/`.gg` ROM loading (512-byte dumper headers tolerated)
-- Two controllers, Pause (NMI), Reset
+- Two controllers, Pause (NMI), Reset; Light Phaser emulated with the
+  mouse (`light_phaser = true` in sesame.cfg, left click = trigger)
 - BIOS slot with real memory-control port (`$3E`): boots BIOS images and
   BIOS + cartridge combos
 - SDSC debug console (ports `$FC`/`$FD`) for homebrew test ROMs

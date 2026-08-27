@@ -45,11 +45,19 @@ public:
     // État des manettes, poussé par le frontend.
     void setPad(int pad, u8 buttons);  // pad 0 ou 1, masque de Button
 
+    // Niveau de la broche TH côté PÉRIPHÉRIQUE (port 0 = A, 1 = B) : le
+    // Light Phaser la tire à l'état BAS quand il « voit » le faisceau.
+    // Lu par 0xDD (bits 6/7) quand la broche est configurée en entrée.
+    void setThLevel(int port, bool level);
+
+    u8 ioControlValue() const { return ioControl; }  // pour le latch TH (Bus)
+
     bool sdscEnabled = false;          // headless : --sdsc l'active
     const std::string& sdscLog() const { return sdscText; }
 
 private:
     u8 pad[2]{};        // masques Button (actifs à 1)
+    bool thInput[2] = {true, true};  // niveaux TH poussés par les périphériques
     u8 ioControl  = 0xFF;
     std::string sdscText;   // tout le texte SDSC reçu (aussi émis sur stdout)
 };

@@ -71,6 +71,10 @@ public:
     void writeControl(u8 v);    // port 0xBF en écriture (adresse/registre, 2 octets)
     u8   vCounter() const;      // port 0x7E (avec le saut propre à la région)
     u8   hCounter() const;      // port 0x7F (valeur latchée)
+    // Latch du HCounter (front TH) : depuis la position CPU dans la ligne
+    // (écritures 0x3F) ou depuis une position écran X (Light Phaser).
+    void latchHCounter(int cycleInLine);
+    void latchHCounterForX(int screenX);
 
     // --- Interface Machine ---------------------------------------------------
     // Rend la ligne courante (si visible), met à jour compteurs de ligne,

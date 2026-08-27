@@ -37,6 +37,7 @@ void printUsage(FILE* out)
         "  --gg                  force Game Gear hardware: an SMS cartridge\n"
         "                        runs in compatibility mode (160x144 window)\n"
         "  --no-sprite-limit     remove the sprites-per-scanline hardware limit\n"
+        "  --gun X Y             aim the Light Phaser at screen position X,Y\n"
         "  --frames N            number of frames to run (default 60)\n"
         "  --trace FILE          write a per-instruction CPU trace to FILE\n"
         "  --screenshot FILE.ppm capture the final framebuffer as a PPM image\n"
@@ -220,6 +221,7 @@ int main(int argc, char** argv)
     long        pauseAt       = -1;       // -1 = jamais
     bool        forceGg       = false;    // --gg : matériel Game Gear forcé
     bool        noSpriteLimit = false;    // --no-sprite-limit (pédagogique)
+    long        gunX = -1, gunY = -1;     // --gun X Y : Light Phaser visé
     const char* stateLoadPath = nullptr;  // --state-load : avant la 1re trame
     long        stateSaveAt   = -1;       // --state-save : après la trame N
     const char* stateSavePath = nullptr;
@@ -279,6 +281,9 @@ int main(int argc, char** argv)
             forceGg = true;
         } else if (std::strcmp(a, "--no-sprite-limit") == 0) {
             noSpriteLimit = true;
+        } else if (std::strcmp(a, "--gun") == 0) {
+            gunX = parseCount(a, (i + 1 < argc) ? argv[++i] : nullptr);
+            gunY = parseCount(a, (i + 1 < argc) ? argv[++i] : nullptr);
         } else if (std::strcmp(a, "--sav") == 0) {
             sav = true;
         } else if (std::strcmp(a, "--sdsc") == 0) {
@@ -339,6 +344,8 @@ int main(int argc, char** argv)
     if (forceGg && machine.model() == Model::Sms)
         machine.setModel(Model::GameGearSms);
     machine.vdp.setSpriteLimit(!noSpriteLimit);
+    if (gunX >= 0)
+        machine.setLightPhaser((int)gunX, (int)gunY);
     const bool gg = (machine.model() != Model::Sms);
     std::fprintf(stderr, "video: %dx%d @ %s%s\n",
                  gg ? Vdp::kGgWidth : Vdp::kWidth,

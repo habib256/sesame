@@ -53,6 +53,14 @@ public:
     // Exécute exactement une trame vidéo (jusqu'au frameDone() du VDP).
     void runFrame();
 
+    // Light Phaser (port A) : position visée en coordonnées écran SMS
+    // (0..255, 0..height-1), ou x = -1 pour débrancher le pistolet.
+    // Approximation documentée : le capteur « voit » le faisceau sur une
+    // petite fenêtre de lignes autour de la visée, sans tenir compte de la
+    // luminosité réelle (les jeux flashent l'écran pendant la détection).
+    // La gâchette est le bouton TL = Io::Button::B1 du pad 0.
+    void setLightPhaser(int x, int y) { gunX = x; gunY = y; }
+
     // Save-states : fichier binaire versionné — en-tête « SESAMEST »,
     // version, modèle et région (le chargement les vérifie et refuse un
     // état pris sur une autre machine). À prendre en FRONTIÈRE de trame :
@@ -92,6 +100,7 @@ private:
     Region region_ = Region::Ntsc;
     Model  model_  = Model::Sms;
     int lineCycles = 0;
+    int gunX = -1, gunY = -1;   // Light Phaser (-1 = débranché)
     void traceStep();
     void serializeAll(StateIO& s);  // corps commun save/load (symétrique)
 };
