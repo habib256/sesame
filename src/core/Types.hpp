@@ -27,7 +27,11 @@ enum class Region : u8 {
 // (Z80, VDP mode 4, PSG) mais diffère par : CRAM 12 bits (32 couleurs
 // parmi 4096), fenêtre visible 160×144 centrée, ports 0x00-0x06 propres
 // (bouton Start, stéréo PSG) et absence de NMI Pause.
+// GameGearSms = cartouche SMS insérée dans une Game Gear via l'adaptateur :
+// le VDP repasse en palette SMS (6 bits) mais la dalle LCD ne montre
+// toujours que la fenêtre 160×144.
 enum class Model : u8 {
-    Sms,       // Master System / Mark III
-    GameGear,  // Game Gear (mode natif)
+    Sms,          // Master System / Mark III
+    GameGear,     // Game Gear (mode natif)
+    GameGearSms,  // Game Gear en mode compatibilité SMS (adaptateur)
 };

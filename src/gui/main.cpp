@@ -157,6 +157,7 @@ int main(int argc, char** argv)
     long        shotAtFrame  = -1;       // --shot-at : validation du rendu GL
     const char* shotPath     = nullptr;
     bool        openMenu     = false;    // --menu : menu borne ouvert au départ
+    bool        forceGg      = false;    // --gg : matériel Game Gear forcé
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--menu") == 0) {
             openMenu = true;
@@ -171,6 +172,10 @@ int main(int argc, char** argv)
             shotPath    = argv[++i];
         } else if (std::strcmp(argv[i], "--pal") == 0) {
             pal = true;
+        } else if (std::strcmp(argv[i], "--gg") == 0) {
+            // Matériel Game Gear forcé : une cartouche SMS tourne en mode
+            // compatibilité (palette SMS, fenêtre LCD 160x144).
+            forceGg = true;
         } else if (std::strcmp(argv[i], "--crt") == 0) {
             crtOn = true;
         } else if (std::strcmp(argv[i], "--kiosk") == 0) {
@@ -217,6 +222,8 @@ int main(int argc, char** argv)
                      romPath);
         return 1;
     }
+    if (forceGg && machine.model() == Model::Sms)
+        machine.setModel(Model::GameGearSms);
     const char* titlePath = romPath ? romPath : biosPath;
 
     // --- Fenêtre GLFW (contexte OpenGL de compatibilité par défaut) ----------
@@ -226,7 +233,9 @@ int main(int argc, char** argv)
     }
 
     const char* consoleName =
-        (machine.model() == Model::GameGear) ? "Game Gear" : "Master System";
+        (machine.model() == Model::GameGear)    ? "Game Gear" :
+        (machine.model() == Model::GameGearSms) ? "Game Gear (SMS mode)"
+                                                : "Master System";
     const std::string title =
         std::string("Sesame — ") + consoleName + " — " + baseName(titlePath);
 
@@ -454,11 +463,15 @@ int main(int argc, char** argv)
                 machine.cart.persistSaveRam();
                 if (machine.loadRom(menu.chosenRom())) {
                     currentRomPath = menu.chosenRom();
-                    // loadRom() peut changer de modèle (.sms <-> .gg).
+                    // loadRom() peut changer de modèle (.sms <-> .gg) ; en
+                    // session --gg, une .sms repasse en compatibilité.
+                    if (forceGg && machine.model() == Model::Sms)
+                        machine.setModel(Model::GameGearSms);
                     glfwSetWindowTitle(
                         win, (std::string("Sesame — ") +
-                              (machine.model() == Model::GameGear
-                                   ? "Game Gear" : "Master System") +
+                              (machine.model() == Model::GameGear    ? "Game Gear" :
+                               machine.model() == Model::GameGearSms ? "Game Gear (SMS mode)"
+                                                                     : "Master System") +
                               " — " + baseName(menu.chosenRom())).c_str());
                 } else {
                     std::fprintf(stderr, "error: cannot load ROM '%s'\n",
@@ -526,7 +539,7 @@ int main(int argc, char** argv)
         // mémoire). En Game Gear, seule la fenêtre visible 160×144 (centrée
         // dans la trame 256×192 du VDP) est téléversée : GL_UNPACK_ROW_LENGTH
         // fait lire la sous-image en place, sans copie.
-        const bool gearGear = (machine.model() == Model::GameGear);
+        const bool gearGear = (machine.model() != Model::Sms);
         const int vdpH = machine.vdp.height();   // 192/224/240 selon le mode
         const int srcW = gearGear ? Vdp::kGgWidth : Vdp::kWidth;
         const int srcH = gearGear ? Vdp::kGgHeight : vdpH;

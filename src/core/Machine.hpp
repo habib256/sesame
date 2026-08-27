@@ -63,11 +63,13 @@ public:
     bool saveState(const std::string& path);
     bool loadState(const std::string& path);
 
-    // Bouton Pause de la console = NMI. La Game Gear n'a PAS de bouton
-    // Pause : son Start est un simple bit lu sur le port 0x00
-    // (Io::Button::Start), jamais un NMI.
+    // Bouton Pause de la console = NMI. La Game Gear native n'a PAS de
+    // bouton Pause : son Start est un simple bit lu sur le port 0x00
+    // (Io::Button::Start), jamais un NMI. En mode compatibilité SMS
+    // (adaptateur), on accorde le NMI : les jeux SMS l'attendent
+    // (choix pragmatique documenté).
     void pressPause() {
-        if (model_ == Model::Sms)
+        if (model_ != Model::GameGear)
             cpu.triggerNmi();
     }
 

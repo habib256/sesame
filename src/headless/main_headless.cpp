@@ -34,6 +34,8 @@ void printUsage(FILE* out)
         "                        loaded there automatically)\n"
         "  --pal                 emulate a PAL console (313 lines, ~49.70 Hz,\n"
         "                        CPU 3546893 Hz) instead of NTSC\n"
+        "  --gg                  force Game Gear hardware: an SMS cartridge\n"
+        "                        runs in compatibility mode (160x144 window)\n"
         "  --frames N            number of frames to run (default 60)\n"
         "  --trace FILE          write a per-instruction CPU trace to FILE\n"
         "  --screenshot FILE.ppm capture the final framebuffer as a PPM image\n"
@@ -64,7 +66,7 @@ bool writePpm(const char* path, const u32* fb, Model model, int vdpHeight)
         std::fprintf(stderr, "error: cannot open '%s' for writing\n", path);
         return false;
     }
-    const bool gg = (model == Model::GameGear);
+    const bool gg = (model != Model::Sms);   // GG natif OU compat SMS
     const int w  = gg ? Vdp::kGgWidth   : Vdp::kWidth;
     const int h  = gg ? Vdp::kGgHeight  : vdpHeight;
     const int x0 = gg ? Vdp::kGgOffsetX : 0;
@@ -215,6 +217,7 @@ int main(int argc, char** argv)
     const char* exitSdsc      = nullptr;
     const char* wavPath       = nullptr;
     long        pauseAt       = -1;       // -1 = jamais
+    bool        forceGg       = false;    // --gg : matériel Game Gear forcé
     const char* stateLoadPath = nullptr;  // --state-load : avant la 1re trame
     long        stateSaveAt   = -1;       // --state-save : après la trame N
     const char* stateSavePath = nullptr;
@@ -270,6 +273,8 @@ int main(int argc, char** argv)
                 return 1;
             }
             stateSavePath = argv[++i];
+        } else if (std::strcmp(a, "--gg") == 0) {
+            forceGg = true;
         } else if (std::strcmp(a, "--sav") == 0) {
             sav = true;
         } else if (std::strcmp(a, "--sdsc") == 0) {
@@ -325,12 +330,18 @@ int main(int argc, char** argv)
         }
         std::fprintf(stderr, "rom: %s (%ld bytes)\n", romPath, fileSize(romPath));
     }
-    const bool gg = (machine.model() == Model::GameGear);
+    // --gg : force le matériel Game Gear ; une cartouche SMS y passe en
+    // mode compatibilité (palette SMS, fenêtre LCD 160×144).
+    if (forceGg && machine.model() == Model::Sms)
+        machine.setModel(Model::GameGearSms);
+    const bool gg = (machine.model() != Model::Sms);
     std::fprintf(stderr, "video: %dx%d @ %s%s\n",
                  gg ? Vdp::kGgWidth : Vdp::kWidth,
                  gg ? Vdp::kGgHeight : Vdp::kHeight,
                  pal ? "50 Hz PAL" : "60 Hz NTSC",
-                 gg ? " (Game Gear)" : "");
+                 machine.model() == Model::GameGear ? " (Game Gear)" :
+                 machine.model() == Model::GameGearSms
+                     ? " (Game Gear, SMS mode)" : "");
 
     machine.io.sdscEnabled = sdsc;
 
