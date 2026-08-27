@@ -16,6 +16,7 @@ read8/write8 et in/out vers les puces) et **`sesame_core` ne dépend pas du GUI*
 | [`README.md`](README.md) | Présentation et usage (en anglais, public). |
 | [`docs/IMPLEMENTED.md`](docs/IMPLEMENTED.md) | Ce qui est fait, par puce. |
 | [`TODO.md`](TODO.md) | Ce qui reste, par sous-système. |
+| [`docs/RECHERCHE-EMULATEURS.md`](docs/RECHERCHE-EMULATEURS.md) | État de l'art des émulateurs SMS/GG open-source, licences, pistes roadmap. |
 
 ## Build & run
 
