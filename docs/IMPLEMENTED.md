@@ -179,8 +179,10 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   borne `--kiosk [--kiosk-monitor N]` (plein
   écran exclusif, curseur masqué) avec menu in-game disponible
   partout (`src/gui/KioskMenu.cpp`, Start manette ou F9 — Échap aussi en
-  borne : jeu en pause, liste des .sms
-  du dossier de la ROM — hors BIOS —, Resume/Restart/Desktop/Quit ; rendu
+  borne : jeu en pause, liste des .sms/.gg/.sg du dossier de la ROM ou des
+  dossiers `rom_dir` de sesame.cfg (« ; » séparés, fusionnés/triés) — hors
+  BIOS —, Resume/Restart/Desktop/échange des manettes 1-2 (persisté)/Quit ;
+  rendu
   immediate mode, police 8×8 font8x8 vendorisée domaine public ; `--menu`
   l'ouvre au lancement) ; en borne, Échap ne quitte jamais ;
   `--shot-at N FILE.ppm` capture le framebuffer GL affiché (trames
