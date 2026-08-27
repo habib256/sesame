@@ -17,6 +17,7 @@
 #include "Psg.hpp"
 #include "Types.hpp"
 #include "Vdp.hpp"
+#include "Ym2413.hpp"
 #include "Z80.hpp"
 #include <cstdio>
 #include <string>
@@ -78,6 +79,7 @@ public:
     Z80 cpu{bus};
     Vdp vdp;
     Psg psg;
+    Ym2413 ym;   // unité FM (SMS japonaise) — muette tant que rien ne l'écrit
     Io  io;
     Cartridge cart;
     Cartridge bios;  // slot BIOS (mêmes ROM + mapper qu'une cartouche)

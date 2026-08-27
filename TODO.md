@@ -28,8 +28,15 @@ et contraintes de licence détaillées là-bas).
       la technique Blip Buffer de Blargg : table générée par
       `tools/make_blip_table.py`, deltas + intégrateur ; repliement mesuré
       -19 dB -> -67 dB, 2026-08) — prérequis YM2413 rempli
-- [ ] YM2413 (FM japonais) — [R] références compatibles licence :
-      Gearsystem, jgenesis, `ym2413` de MAME si BSD-3
+- [x] YM2413 (FM japonais) — implémentation maison (`src/core/Ym2413.cpp`) :
+      9 canaux mélodiques 2 opérateurs, tables log-sin/exp du matériel OPL,
+      ADSR, KSL/KSR, vibrato/trémolo, détection port 0xF2, mixage via le
+      PSG, save-state (version d'état 2). Validé : fréquence porteuse
+      exacte (formule matérielle), spectre sinus propre, bandes latérales
+      FM cohérentes, reprise d'état octet-perfect (2026-08)
+- [ ] YM2413, suite : mode rythme (canaux 6-8 percussions), cadences
+      d'enveloppe exactes au cycle, jeu d'instruments ROM vérifié contre un
+      dump matériel (le jeu actuel est une approximation documentée)
 
 ## Machine
 - [x] Save-states — sérialiseur symétrique `StateIO`, fichier versionné

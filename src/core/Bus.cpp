@@ -9,10 +9,12 @@
 #include "Cartridge.hpp"
 #include "Vdp.hpp"
 #include "Psg.hpp"
+#include "Ym2413.hpp"
 #include "Io.hpp"
 
-void Bus::attach(Cartridge* c, Cartridge* b, Vdp* v, Psg* p, Io* i) {
-    cart = c; bios = b; vdp = v; psg = p; io = i;
+void Bus::attach(Cartridge* c, Cartridge* b, Vdp* v, Psg* p, Ym2413* y,
+                 Io* i) {
+    cart = c; bios = b; vdp = v; psg = p; ym = y; io = i;
 }
 
 void Bus::reset() {
@@ -71,6 +73,10 @@ u8 Bus::ioRead(u8 port) {
     case 0x80:
         return (port & 1) ? vdp->readStatus() : vdp->readData();
     default:
+        // 0xF2 : détection de l'unité FM (SMS japonaise) — relit les bits
+        // 0-1 du contrôle audio quand l'unité est présente.
+        if (port == 0xF2 && model == Model::Sms && ym)
+            return ym->readControl();
         return io->readPort((port & 1) ? 0xDD : 0xDC);
     }
 }
@@ -97,7 +103,13 @@ void Bus::ioWrite(u8 port, u8 v) {
         return;
     default:
         // La plage 0xC0-0xFF est en lecture seule sur le vrai matériel,
-        // SAUF la convention SDSC (0xFC/0xFD) utilisée par le homebrew.
+        // SAUF l'unité FM (0xF0-0xF2, SMS japonaise) et la convention SDSC
+        // (0xFC/0xFD) utilisée par le homebrew.
+        if (model == Model::Sms && ym) {
+            if (port == 0xF0) { ym->writeAddr(v); return; }
+            if (port == 0xF1) { ym->writeData(v); return; }
+            if (port == 0xF2) { ym->writeControl(v); return; }
+        }
         if (port == 0xFC) io->writeSdscControl(v);
         else if (port == 0xFD) io->writeSdscData(v);
         return;

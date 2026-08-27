@@ -49,6 +49,22 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   0x06 = stéréo PSG (panning par canal appliqué à la sortie)
 - Pas de NMI Pause (`Machine::pressPause` sans effet en Game Gear)
 
+## YM2413 / OPLL (`src/core/Ym2413.cpp`) — unité FM des SMS japonaises
+- Implémentation maison : 9 canaux mélodiques, 2 opérateurs (modulateur ->
+  porteuse, rétroaction), calcul en logarithme avec les tables log-sin/exp
+  du matériel OPL (rétro-ingénierie publique)
+- Enveloppes ADSR (tenu/percussif), key scaling (KSL/KSR), vibrato et
+  trémolo (LFO), demi-onde redressée (bits DC/DM), instrument utilisateur
+  exact (registres 0x00-0x07)
+- Ports 0xF0/0xF1 (registre/donnée), 0xF2 (contrôle audio, relu par les
+  jeux pour détecter l'unité — présente en SMS, absente en Game Gear)
+- Sortie native à horloge/72 (~49,7 kHz), moyennée par trame 44,1 kHz et
+  mixée par le PSG sur les deux voies ; sérialisée dans les save-states
+  (version d'état 2)
+- Approximations documentées : cadences d'enveloppe (forme exacte, cycle
+  approché), instruments ROM (jeu approximatif, dump vérifié en TODO),
+  mode rythme non implémenté
+
 ## Mapper / cartouche (`src/core/Cartridge.cpp`)
 - Mapper Sega standard (0xFFFC-0xFFFF), premier Ko non paginé
 - RAM cartouche 2×16 Ko (bit3/bit2 de 0xFFFC), persistée en `<rom>.sav`

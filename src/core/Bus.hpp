@@ -18,21 +18,25 @@
 //    0x00-0x3F : pair -> contrôle mémoire (0x3E), impair -> contrôle E/S (0x3F)
 //    0x40-0x7F : lecture pair -> VCounter, impair -> HCounter ; écriture -> PSG
 //    0x80-0xBF : pair -> VDP données, impair -> VDP contrôle
-//    0xC0-0xFF : lecture pair -> 0xDC, impair -> 0xDD ; 0xFC/0xFD -> SDSC
+//    0xC0-0xFF : lecture pair -> 0xDC, impair -> 0xDD ; 0xFC/0xFD -> SDSC ;
+//                0xF0-0xF2 -> unité FM YM2413 (SMS japonaise)
 //  En Game Gear, les ports 0x00-0x06 sont soustraits à la règle pair/impair :
-//  0x00 Start/région, 0x01-0x05 EXT/série, 0x06 stéréo PSG.
+//  0x00 Start/région, 0x01-0x05 EXT/série, 0x06 stéréo PSG — et l'unité FM
+//  n'existe pas.
 // =============================================================================
 #include "Types.hpp"
 
 class Cartridge;
 class Vdp;
 class Psg;
+class Ym2413;
 class Io;
 class StateIO;
 
 class Bus {
 public:
-    void attach(Cartridge* cart, Cartridge* bios, Vdp* vdp, Psg* psg, Io* io);
+    void attach(Cartridge* cart, Cartridge* bios, Vdp* vdp, Psg* psg,
+                Ym2413* ym, Io* io);
     void reset();
 
     // Save-state : work RAM + contrôle mémoire.
@@ -58,6 +62,7 @@ private:
     Cartridge* bios = nullptr;
     Vdp* vdp = nullptr;
     Psg* psg = nullptr;
+    Ym2413* ym = nullptr;
     Io*  io  = nullptr;
 
     u8 memControl = 0;  // port 0x3E (bit à 1 = désactivé) ; 0 = tout activé

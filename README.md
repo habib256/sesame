@@ -13,6 +13,8 @@ the GUI; the `Bus` class *is* the memory map.
 - NTSC and PAL consoles (`--pal`: 313 lines, ~49.70 Hz, PAL CPU clock)
 - SN76489 PSG (3 square channels + noise), 44.1 kHz band-limited stereo
   output
+- YM2413 FM unit (Japanese SMS): 9 melodic 2-op channels, hardware OPL
+  log-sin/exp tables, `$F2` detection (rhythm mode TODO)
 - Game Gear mode (auto-detected from `.gg`): 12-bit palette, 160x144
   cropped display, Start button, per-channel stereo panning, GG-specific
   ports

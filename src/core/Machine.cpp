@@ -11,7 +11,8 @@
 #include "StateIO.hpp"
 
 Machine::Machine() {
-    bus.attach(&cart, &bios, &vdp, &psg, &io);
+    bus.attach(&cart, &bios, &vdp, &psg, &ym, &io);
+    psg.setFmSource(&ym);  // la sortie FM est mixée par le PSG
     bios.savEnabled = false;  // un BIOS n'a pas de RAM de sauvegarde sur pile
     setRegion(Region::Ntsc);
 }
@@ -57,6 +58,7 @@ void Machine::reset() {
     cpu.reset();
     vdp.reset();
     psg.reset();
+    ym.reset();
     io.reset();
     lineCycles = 0;
     frameCount = 0;
@@ -85,6 +87,7 @@ void Machine::runFrame() {
         if (traceFile)
             traceStep();
         int c = cpu.step();
+        ym.runCycles(c);   // AVANT le PSG : il vient chercher la sortie FM
         psg.runCycles(c);
         lineCycles += c;
         while (lineCycles >= kCyclesPerLine) {
@@ -104,7 +107,7 @@ void Machine::runFrame() {
 // -----------------------------------------------------------------------------
 namespace {
 constexpr char kStateMagic[8] = {'S','E','S','A','M','E','S','T'};
-constexpr u32  kStateVersion  = 1;
+constexpr u32  kStateVersion  = 2;  // v2 : ajout de l'état YM2413
 }  // namespace
 
 void Machine::serializeAll(StateIO& s) {
@@ -112,6 +115,7 @@ void Machine::serializeAll(StateIO& s) {
     bus.serialize(s);
     vdp.serialize(s);
     psg.serialize(s);
+    ym.serialize(s);
     io.serialize(s);
     cart.serialize(s);
     bios.serialize(s);

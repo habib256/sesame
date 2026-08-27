@@ -17,6 +17,7 @@
 #include "Types.hpp"
 
 class StateIO;
+class Ym2413;
 
 class Psg {
 public:
@@ -27,6 +28,11 @@ public:
     // Save-state : registres et synthèse. L'anneau de sortie n'est PAS
     // sérialisé (audio en vol) : il est vidé au chargement.
     void serialize(StateIO& s);
+
+    // Source FM optionnelle (YM2413) : sa sortie est mixée sur les deux
+    // voies à chaque trame produite (câblé par Machine ; l'état du YM
+    // lui-même est sérialisé par Machine, pas ici).
+    void setFmSource(Ym2413* f) { fm = f; }
 
     // Horloge CPU/puce en Hz (NTSC ou PAL) — pilote le rééchantillonnage.
     // Réglage matériel poussé par Machine::setRegion, survit au reset.
@@ -53,6 +59,7 @@ private:
     // rééchantillonnage, anneau) : voir Psg.cpp.
     int cpuClock = 3579545;  // Hz (NTSC par défaut)
 
+    Ym2413* fm = nullptr;   // source FM mixée à la sortie (nullptr = aucune)
     u8  stereoMask = 0xFF;  // GG : tous les canaux des deux côtés au reset
     u8  latchedChannel = 0;
     bool latchedIsVolume = false;

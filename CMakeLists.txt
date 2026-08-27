@@ -43,6 +43,7 @@ add_library(sesame_core STATIC
     src/core/Z80Disasm.cpp
     src/core/Vdp.cpp
     src/core/Psg.cpp
+    src/core/Ym2413.cpp
     src/core/Io.cpp
     src/core/Cartridge.cpp
 )

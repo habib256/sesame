@@ -31,6 +31,7 @@
 #include "Psg.hpp"
 
 #include "StateIO.hpp"
+#include "Ym2413.hpp"
 
 namespace {
 
@@ -197,13 +198,17 @@ void Psg::addDelta(int side, int delta) {
 // On intègre les deltas des deux voies, on libère les cases, et on émet.
 void Psg::finalizeSample() {
     const int slot = (int)(sampleIndex & (kBlipBufSize - 1));
+    // Sortie FM éventuelle (mono, même valeur sur les deux voies) : moyenne
+    // des échantillons natifs du YM2413 depuis la trame précédente.
+    const int fmOut = fm ? fm->takeSample() : 0;
     s16 out[2];
     for (int s = 0; s < 2; ++s) {
         blipSum[s] += blipBuf[s][slot];
         blipBuf[s][slot] = 0;
         // Point fixe -> s16, arrondi au plus proche ; l'ondulation de Gibbs
         // peut dépasser transitoirement l'amplitude nominale, d'où l'écrêtage.
-        s32 v = (blipSum[s] + (1 << (kBlipScaleBits - 1))) >> kBlipScaleBits;
+        s32 v = ((blipSum[s] + (1 << (kBlipScaleBits - 1))) >> kBlipScaleBits)
+                + fmOut;
         if (v < -32768) v = -32768;
         if (v > 32767)  v = 32767;
         out[s] = (s16)v;
