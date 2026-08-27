@@ -35,6 +35,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -487,6 +488,12 @@ int main(int argc, char** argv)
         return p.substr(0, dot) + ".state";
     };
     bool f5WasDown = false, f7WasDown = false;
+    // Rewind : un save-state en mémoire par trame émulée, dans un anneau
+    // borné ; maintenir Retour arrière remonte le temps une trame par trame
+    // affichée (le framebuffer se reconstruit en rejouant la trame).
+    std::deque<std::vector<u8>> rewindHist;
+    const size_t rewindMax = cfg.rewind
+        ? (size_t)(cfg.rewindSeconds > 0 ? cfg.rewindSeconds : 1) * 60 : 0;
     // Viewport de la trame précédente (letterbox) : sert à convertir la
     // position souris en coordonnées écran SMS pour le Light Phaser.
     int lastVx = 0, lastVy = 0, lastVw = 1, lastVh = 1;
@@ -652,6 +659,28 @@ int main(int argc, char** argv)
             machine.io.setPad(0, p0);
             machine.io.setPad(1, gp1);
 
+            // Rewind : tant que la touche est tenue et qu'il reste de
+            // l'historique, on remonte d'une trame par trame affichée au
+            // lieu d'émuler en avant.
+            const bool rewindDown =
+                rewindMax > 0 &&
+                glfwGetKey(win, GLFW_KEY_BACKSPACE) == GLFW_PRESS;
+            if (rewindDown && rewindHist.size() >= 2) {
+                rewindHist.pop_back();
+                const std::vector<u8>& top = rewindHist.back();
+                if (machine.loadStateBuffer(top.data(), top.size()))
+                    machine.runFrame();   // rejoue la trame pour l'image
+                int rn;
+                while ((rn = machine.psg.readSamples(
+                            audioScratch,
+                            static_cast<int>(sizeof(audioScratch) /
+                                             sizeof(audioScratch[0]) / 2))) > 0) {
+                    if (audioOn)
+                        audio.push(audioScratch, rn);
+                }
+                nextFrameDue = glfwGetTime();   // pas de rattrapage après
+            } else {
+
             // Émule les trames arrivées à échéance (0 sur un écran plus
             // rapide que 60 Hz, parfois 2 pour rattraper un hoquet — borné
             // pour ne pas spiraler). Après un vrai décrochage (fenêtre
@@ -660,6 +689,15 @@ int main(int argc, char** argv)
             if (now - nextFrameDue > 0.25)
                 nextFrameDue = now;
             for (int burst = 0; burst < 4 && now >= nextFrameDue; ++burst) {
+                if (rewindMax > 0) {
+                    // Un état par trame émulée, historique borné.
+                    std::vector<u8> snap;
+                    if (machine.saveStateBuffer(snap)) {
+                        rewindHist.push_back(std::move(snap));
+                        while (rewindHist.size() > rewindMax)
+                            rewindHist.pop_front();
+                    }
+                }
                 machine.runFrame();
                 nextFrameDue += framePeriod;
                 now = glfwGetTime();
@@ -676,6 +714,7 @@ int main(int argc, char** argv)
                         audio.push(audioScratch, n);
                 }
             }
+            }   // fin du bloc émulation avant (else du rewind)
         }
 
         // Téléversement du framebuffer RGBA (u32 LE : octets R,G,B,A en

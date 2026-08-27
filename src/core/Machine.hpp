@@ -21,6 +21,7 @@
 #include "Z80.hpp"
 #include <cstdio>
 #include <string>
+#include <vector>
 
 class StateIO;
 
@@ -71,6 +72,11 @@ public:
     bool saveState(const std::string& path);
     bool loadState(const std::string& path);
 
+    // Variantes en MÉMOIRE (même format que les fichiers) — base du rewind :
+    // un état par trame dans un anneau, rechargé en remontant le temps.
+    bool saveStateBuffer(std::vector<u8>& out);
+    bool loadStateBuffer(const u8* data, size_t size);
+
     // Bouton Pause de la console = NMI. La Game Gear native n'a PAS de
     // bouton Pause : son Start est un simple bit lu sur le port 0x00
     // (Io::Button::Start), jamais un NMI. En mode compatibilité SMS
@@ -103,4 +109,6 @@ private:
     int gunX = -1, gunY = -1;   // Light Phaser (-1 = débranché)
     void traceStep();
     void serializeAll(StateIO& s);  // corps commun save/load (symétrique)
+    bool writeState(FILE* f);       // en-tête + état vers un flux ouvert
+    bool readState(FILE* f, const char* what);  // relecture + vérifications
 };

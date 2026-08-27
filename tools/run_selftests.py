@@ -166,6 +166,13 @@ def main():
             check(f'VDP scene "{name}" matches reference',
                   cmp_run.returncode == 0, cmp_run.stdout.strip())
 
+    # --- 4 bis. Rewind : états mémoire + rejeu pixel-exact -------------------
+    run = subprocess.run(
+        [str(HEADLESS), str(ROM), '--rewind-check'],
+        capture_output=True, text=True, timeout=120, cwd=ROOT)
+    check('rewind states replay pixel-exact',
+          'REWIND OK' in run.stdout, run.stdout.strip())
+
     # --- 5 bis. ROM de test des modes hérités TMS9918 (SG-1000) --------------
     gen = subprocess.run(
         [sys.executable, str(ROOT / 'tools' / 'make_tms_rom.py')],

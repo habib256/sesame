@@ -38,6 +38,8 @@ void printUsage(FILE* out)
         "                        runs in compatibility mode (160x144 window)\n"
         "  --no-sprite-limit     remove the sprites-per-scanline hardware limit\n"
         "  --gun X Y             aim the Light Phaser at screen position X,Y\n"
+        "  --rewind-check        exercise the in-memory rewind states and verify\n"
+        "                        that rewinding then replaying is pixel-exact\n"
         "  --frames N            number of frames to run (default 60)\n"
         "  --trace FILE          write a per-instruction CPU trace to FILE\n"
         "  --screenshot FILE.ppm capture the final framebuffer as a PPM image\n"
@@ -222,6 +224,7 @@ int main(int argc, char** argv)
     bool        forceGg       = false;    // --gg : matériel Game Gear forcé
     bool        noSpriteLimit = false;    // --no-sprite-limit (pédagogique)
     long        gunX = -1, gunY = -1;     // --gun X Y : Light Phaser visé
+    bool        rewindCheck = false;      // --rewind-check : test du rewind
     const char* stateLoadPath = nullptr;  // --state-load : avant la 1re trame
     long        stateSaveAt   = -1;       // --state-save : après la trame N
     const char* stateSavePath = nullptr;
@@ -281,6 +284,8 @@ int main(int argc, char** argv)
             forceGg = true;
         } else if (std::strcmp(a, "--no-sprite-limit") == 0) {
             noSpriteLimit = true;
+        } else if (std::strcmp(a, "--rewind-check") == 0) {
+            rewindCheck = true;
         } else if (std::strcmp(a, "--gun") == 0) {
             gunX = parseCount(a, (i + 1 < argc) ? argv[++i] : nullptr);
             gunY = parseCount(a, (i + 1 < argc) ? argv[++i] : nullptr);
@@ -387,6 +392,36 @@ int main(int argc, char** argv)
         }
         // En-tête provisoire (tailles nulles), corrigé après le run.
         writeWavHeader(wavFile, 0);
+    }
+
+    // --rewind-check : la base du rewind — 40 trames avec un état MÉMOIRE
+    // par trame, retour à la trame 20, rejeu jusqu'à 40 — doit reproduire
+    // exactement le même framebuffer (déterminisme des états en mémoire).
+    if (rewindCheck) {
+        std::vector<std::vector<u8>> hist;
+        for (int fr = 0; fr < 40; ++fr) {
+            std::vector<u8> snap;
+            if (!machine.saveStateBuffer(snap)) {
+                std::fprintf(stderr, "REWIND FAIL (save buffer)\n");
+                return 1;
+            }
+            hist.push_back(std::move(snap));
+            machine.runFrame();
+        }
+        const size_t fbBytes =
+            (size_t)Vdp::kWidth * machine.vdp.height() * sizeof(u32);
+        std::vector<u8> ref((const u8*)machine.vdp.frameBuffer(),
+                            (const u8*)machine.vdp.frameBuffer() + fbBytes);
+        if (!machine.loadStateBuffer(hist[20].data(), hist[20].size())) {
+            std::fprintf(stderr, "REWIND FAIL (load buffer)\n");
+            return 1;
+        }
+        for (int fr = 20; fr < 40; ++fr)
+            machine.runFrame();
+        const bool same =
+            std::memcmp(ref.data(), machine.vdp.frameBuffer(), fbBytes) == 0;
+        std::printf(same ? "REWIND OK\n" : "REWIND FAIL\n");
+        return same ? 0 : 1;
     }
 
     // --- Boucle principale : une itération = une trame vidéo -----------------

@@ -32,6 +32,8 @@ struct Config {
     int  kioskMonitor = 0;        // kiosk_monitor
     bool noSpriteLimit = false;   // no_sprite_limit (option pédagogique)
     bool lightPhaser = false;     // light_phaser : souris = pistolet (port A)
+    bool rewind = true;           // rewind : retour arrière (touche Backspace)
+    int  rewindSeconds = 8;       // rewind_seconds : profondeur de l'historique
     std::string romDir;           // rom_dir : dossier du menu borne, vide = auto
     CrtParams crtParams;          // crt_* (voir save() pour la liste)
     // Rendu « dalle LCD » appliqué automatiquement en Game Gear à la place

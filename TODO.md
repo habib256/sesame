@@ -119,8 +119,11 @@ et contraintes de licence détaillées là-bas).
       mémoire, points d'arrêt et pas-à-pas à des assistants IA via STDIO —
       base naturelle : `sesame-headless` déterministe. Le chantier le plus
       aligné avec la vocation pédagogique
-- [ ] [R] Step-back (recul d'exécution par ligne/frame, inspiration
-      Mesen 2) — dépend des save-states déterministes
+- [x] [R] Rewind / step-back par trame (inspiration Mesen 2) : un
+      save-state MÉMOIRE par trame émulée dans un anneau borné
+      (`rewind_seconds`, ~5,5 Mo/s), touche Retour arrière maintenue au
+      GUI ; `--rewind-check` headless (rejeu pixel-exact) dans la suite
+      (28 checks) (2026-08). Reste : recul par LIGNE (débogueur)
 - [ ] [R] Code/Data Logger (tracer code exécuté vs données dans la ROM,
       inspiration Mesen 2/Nexen)
 

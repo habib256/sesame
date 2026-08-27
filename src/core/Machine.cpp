@@ -6,6 +6,7 @@
 #include "Machine.hpp"
 
 #include <cctype>
+#include <cstdlib>
 #include <cstring>
 
 #include "StateIO.hpp"
@@ -136,13 +137,7 @@ void Machine::serializeAll(StateIO& s) {
     s.u64v(frameCount);
 }
 
-bool Machine::saveState(const std::string& path) {
-    FILE* f = std::fopen(path.c_str(), "wb");
-    if (!f) {
-        std::fprintf(stderr, "error: cannot open state file '%s' for writing\n",
-                     path.c_str());
-        return false;
-    }
+bool Machine::writeState(FILE* f) {
     StateIO s(f, StateIO::Mode::Save);
     u32 version = kStateVersion;
     u8  model   = (u8)model_;
@@ -152,7 +147,51 @@ bool Machine::saveState(const std::string& path) {
     s.u8v(model);
     s.u8v(region);
     serializeAll(s);
-    const bool ok = s.ok();
+    return s.ok();
+}
+
+bool Machine::readState(FILE* f, const char* what) {
+    StateIO s(f, StateIO::Mode::Load);
+    char magic[8] = {};
+    u32  version  = 0;
+    u8   model = 0, region = 0;
+    s.bytes((u8*)magic, sizeof(magic));
+    s.u32v(version);
+    s.u8v(model);
+    s.u8v(region);
+    bool ok = s.ok();
+    if (ok && std::memcmp(magic, kStateMagic, sizeof(magic)) != 0) {
+        std::fprintf(stderr, "error: '%s' is not a Sesame state\n", what);
+        ok = false;
+    }
+    if (ok && version != kStateVersion) {
+        std::fprintf(stderr, "error: state version %u (expected %u)\n",
+                     version, kStateVersion);
+        ok = false;
+    }
+    if (ok && (model != (u8)model_ || region != (u8)region_)) {
+        std::fprintf(stderr,
+                     "error: state is for another machine "
+                     "(model/region mismatch)\n");
+        ok = false;
+    }
+    if (ok) {
+        serializeAll(s);
+        ok = s.ok();
+        if (!ok)
+            std::fprintf(stderr, "error: truncated state '%s'\n", what);
+    }
+    return ok;
+}
+
+bool Machine::saveState(const std::string& path) {
+    FILE* f = std::fopen(path.c_str(), "wb");
+    if (!f) {
+        std::fprintf(stderr, "error: cannot open state file '%s' for writing\n",
+                     path.c_str());
+        return false;
+    }
+    const bool ok = writeState(f);
     std::fclose(f);
     if (!ok)
         std::fprintf(stderr, "error: short write to state file '%s'\n",
@@ -167,38 +206,32 @@ bool Machine::loadState(const std::string& path) {
                      path.c_str());
         return false;
     }
-    StateIO s(f, StateIO::Mode::Load);
-    char magic[8] = {};
-    u32  version  = 0;
-    u8   model = 0, region = 0;
-    s.bytes((u8*)magic, sizeof(magic));
-    s.u32v(version);
-    s.u8v(model);
-    s.u8v(region);
-    bool ok = s.ok();
-    if (ok && std::memcmp(magic, kStateMagic, sizeof(magic)) != 0) {
-        std::fprintf(stderr, "error: '%s' is not a Sesame state file\n",
-                     path.c_str());
-        ok = false;
-    }
-    if (ok && version != kStateVersion) {
-        std::fprintf(stderr, "error: state file version %u (expected %u)\n",
-                     version, kStateVersion);
-        ok = false;
-    }
-    if (ok && (model != (u8)model_ || region != (u8)region_)) {
-        std::fprintf(stderr,
-                     "error: state file is for another machine "
-                     "(model/region mismatch)\n");
-        ok = false;
-    }
-    if (ok) {
-        serializeAll(s);
-        ok = s.ok();
-        if (!ok)
-            std::fprintf(stderr, "error: truncated state file '%s'\n",
-                         path.c_str());
-    }
+    const bool ok = readState(f, path.c_str());
+    std::fclose(f);
+    return ok;
+}
+
+// Variantes en mémoire : mêmes octets que les fichiers, via open_memstream
+// et fmemopen (POSIX — présents sur macOS, Linux et Emscripten).
+bool Machine::saveStateBuffer(std::vector<u8>& out) {
+    char* mem = nullptr;
+    size_t size = 0;
+    FILE* f = open_memstream(&mem, &size);
+    if (!f)
+        return false;
+    const bool ok = writeState(f);
+    std::fclose(f);
+    if (ok)
+        out.assign((u8*)mem, (u8*)mem + size);
+    std::free(mem);
+    return ok;
+}
+
+bool Machine::loadStateBuffer(const u8* data, size_t size) {
+    FILE* f = fmemopen(const_cast<u8*>(data), size, "rb");
+    if (!f)
+        return false;
+    const bool ok = readState(f, "rewind buffer");
     std::fclose(f);
     return ok;
 }

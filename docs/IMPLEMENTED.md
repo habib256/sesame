@@ -136,6 +136,11 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
   modifiée au chargement (persistance .sav cohérente) ; ~90 Ko par état
 - GUI : F5 = save, F7 = load (`<rom>.state` à côté de la ROM) ;
   headless : `--state-save N FILE`, `--state-load FILE`
+- Variantes MÉMOIRE (open_memstream/fmemopen, même format) — base du
+  REWIND : un état par trame émulée dans un anneau borné, Retour arrière
+  maintenu au GUI remonte le temps trame par trame (l'image se reconstruit
+  en rejouant la trame) ; `rewind`/`rewind_seconds` dans sesame.cfg
+  (~5,5 Mo de RAM par seconde d'historique), `--rewind-check` au headless
 - Validé : capture à la trame 120 identique octet par octet entre run
   continu et save-à-60 + reload dans un NOUVEAU processus ; idem pour
   l'audio WAV de reprise

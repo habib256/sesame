@@ -31,7 +31,8 @@ the GUI; the `Bus` class *is* the memory map.
   BIOS + cartridge combos
 - SDSC debug console (ports `$FC`/`$FD`) for homebrew test ROMs
 - Save states (F5/F7 in the GUI; `--state-save`/`--state-load` headless),
-  deterministic across processes
+  deterministic across processes; hold Backspace to rewind time
+  (`rewind_seconds` of history in sesame.cfg)
 - Headless frontend: deterministic traces, PPM screenshots, WAV dump
 - Windowed frontend: GLFW3 + OpenGL, real-time audio (CoreAudio on macOS),
   USB gamepads (GLFW gamepad API)
