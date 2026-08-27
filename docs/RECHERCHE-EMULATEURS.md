@@ -39,7 +39,10 @@ un détail précis.
 
 ## Implications concrètes pour la feuille de route Sesame
 
-Croisement avec `TODO.md` :
+Croisement établi avec le `TODO.md` de l'époque (2026-08). La plupart de ces
+pistes ont depuis été réalisées — voir [`CHANGELOG.md`](../CHANGELOG.md) ;
+restent ouverts les points 6 (serveur MCP), 7 (step-back par ligne,
+Code/Data Logger) et 9 (SegaScope), repris dans le `TODO.md` actuel :
 
 1. **YM2413 (TODO Son)** — implémentations GPLv3/MIT consultables et
    réutilisables : Gearsystem, jgenesis, MAME (`ym2413` si BSD-3). Prévoir

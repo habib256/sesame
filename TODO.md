@@ -1,148 +1,128 @@
-# TODO — par sous-système
+# TODO — travaux ouverts
 
-Les entrées marquées `[R]` viennent de l'état de l'art
-[`docs/RECHERCHE-EMULATEURS.md`](docs/RECHERCHE-EMULATEURS.md) (références
-et contraintes de licence détaillées là-bas).
+Uniquement l'ouvert. Le réalisé est dans [`CHANGELOG.md`](CHANGELOG.md)
+(historique) et [`docs/IMPLEMENTED.md`](docs/IMPLEMENTED.md) (état par puce).
+Les phases 1-5 viennent de l'audit d'architecture du 2026-08-27 (constats
+vérifiés dans le code, références `fichier:ligne`). Les entrées `[R]`
+viennent de [`docs/RECHERCHE-EMULATEURS.md`](docs/RECHERCHE-EMULATEURS.md).
 
-## CPU (Z80)
-- [x] Valider avec ZEXDOC/ZEXALL (port SMS de Maxim Zhao via SDSC :
-      `tools/fetch_zexall.py` puis `tools/run_zexall.py`, 2026-08)
-- [x] MEMPTR/WZ exact pour BIT n,(HL) — validé par le test
-      « bit n,r/(hl) » de ZEXALL (2026-08)
+## Phase 1 — Bugs confirmés
 
-## VDP
-- [x] Modes 224/240 lignes (SMS2) — sélection M1/M3 (M4+M2), table de noms
-      0x?700 32 rangées, scroll Y mod 256, terminateur de sprites 0xD0
-      inactif, séquences VCounter par mode/norme, hauteur dynamique dans
-      les deux frontends ; scène 224 + étalon dans la ROM de test VDP
-      (17 checks) (2026-08)
-- [x] PAL (313 lignes, ~49,70 Hz) — cadence, horloge CPU/PSG 3 546 893 Hz,
-      séquence VCounter (`--pal` dans les deux frontends, 2026-08)
-- [x] HCounter réel + latch sur front TH — séquence 0x00-0x93/0xE9-0xFF
-      depuis la position CPU dans la ligne, latch sur écriture 0x3F (bits
-      TH) et par le Light Phaser ; pistolet émulé (fenêtre de ±2 lignes,
-      TH d'entrée sur 0xDD, HC = X/2 + 0x28) — souris + clic au GUI
-      (`light_phaser` dans sesame.cfg), `--gun X Y` au headless, validé
-      par ROM de test sur trois visées (2026-08)
-- [x] Modes hérités TMS9918 pour les jeux SG-1000/F-16 — Graphic I/II,
-      texte (40 col.), multicolor, sprites TMS (4/ligne, drapeau 5S +
-      numéro, coïncidence, early clock, 16×16, MAG) ; couleurs CRAM
-      sprite (comportement 315-5124) avec repli palette TMS fixe tant que
-      la CRAM n'a pas été écrite (jeux SG-1000) ; `.sg` accepté partout ;
-      ROM de test `tmstest.sg` + étalon (27 checks), état v4 (2026-08)
-- [x] Timing fin intra-ligne — rendu du mode 4 par TRANCHES avec
-      rattrapage de faisceau (le Bus rend la ligne jusqu'à la position CPU
-      avant toute écriture VDP) : effets CRAM mid-line au pixel près,
-      scroll X latché en début de ligne (matériel), sprites évalués une
-      fois par ligne (SAT lue au hblank). Étalon irqline régénéré (le
-      split est plus fidèle d'une ligne). Modes TMS : ligne entière
-      (aucun jeu connu n'en a besoin) (2026-08)
-- [x] [R] Option « no sprite limit » (mode 4 : 8/ligne ; TMS : 4/ligne ;
-      les drapeaux overflow/5S restent levés) — `no_sprite_limit` dans
-      sesame.cfg, `--no-sprite-limit` au headless (2026-08)
+Fait (2026-08-27) — voir [`CHANGELOG.md`](CHANGELOG.md).
 
-## Son
-- [x] Sortie audio temps réel dans le GUI (CoreAudio/AudioQueue, 2026-08)
-- [x] Backend audio Linux ALSA (thread d'écriture bloquante, stéréo s16,
-      ~50 ms de latence ; stub muet si ALSA absent au configure) —
-      ÉCRIT SANS ÊTRE TESTÉ (pas de machine Linux sous la main) (2026-08)
-- [x] [R] Synthèse à bande limitée pour le PSG (réimplémentation maison de
-      la technique Blip Buffer de Blargg : table générée par
-      `tools/make_blip_table.py`, deltas + intégrateur ; repliement mesuré
-      -19 dB -> -67 dB, 2026-08) — prérequis YM2413 rempli
-- [x] YM2413 (FM japonais) — implémentation maison (`src/core/Ym2413.cpp`) :
-      9 canaux mélodiques 2 opérateurs, tables log-sin/exp du matériel OPL,
-      ADSR, KSL/KSR, vibrato/trémolo, détection port 0xF2, mixage via le
-      PSG, save-state (version d'état 2). Validé : fréquence porteuse
-      exacte (formule matérielle), spectre sinus propre, bandes latérales
-      FM cohérentes, reprise d'état octet-perfect (2026-08)
-- [x] YM2413, suite : instruments ROM et patches rythme VÉRIFIÉS
-      (valeurs communautaires issues de l'analyse du die — doc andete,
-      publiées dans emu2413/MIT, attribution dans le code) ; cadences
-      d'enveloppe alignées sur les motifs de sous-taux OPL (patterns sur
-      8 pas, attaque exponentielle matérielle). Validé : violon tenu,
-      piano percussif, vibraphone à queue — les caractères réels (2026-08).
-      Reste (non bloquant) : EG exact au cycle près du silicium
+## Phase 2 — CI & durcissement de la suite (~1 jour)
 
-## Machine
-- [x] Save-states — sérialiseur symétrique `StateIO`, fichier versionné
-      « SESAMEST » (modèle/région vérifiés), pris en frontière de trame ;
-      GUI : F5/F7 -> `<rom>.state` ; headless : `--state-save N FILE` /
-      `--state-load FILE` ; validé pixel-perfect et octet-perfect audio à
-      travers la coupe, processus séparés (2026-08)
-- [x] BIOS optionnel + contrôle mémoire 0x3E réel (2026-08 ; reste : bouton
-      Reset console et lecture-arrière 0x3E côté SMS1)
-- [x] Game Gear — mode natif : auto-détection `.gg`, CRAM 12 bits écrite
-      par mot (latch pair/impair), fenêtre 160x144 recadrée dans les deux
-      frontends (GUI 10:9, PPM headless), ports 0x00-0x06 (Start actif bas,
-      EXT/série stub, stéréo PSG mémorisée), pas de NMI Pause (2026-08)
-- [x] Game Gear, stéréo : chaîne audio en trames stéréo entrelacées de bout
-      en bout (PSG par voie selon le registre 0x06, CoreAudio 2 canaux,
-      WAV stéréo ; en SMS les deux voies sont identiques) (2026-08)
-- [x] Mode compatibilité SMS-sur-GG (`Model::GameGearSms`, drapeau `--gg`
-      des deux frontends : palette SMS, fenêtre LCD 160x144, NMI Pause
-      accordé) (2026-08)
-- [x] Game Gear, shader LCD : en mode GG la pile d'effets bascule sur un
-      préréglage « dalle » — rémanence marquée (ghosting), grille de pixels
-      (masque à points), ni scanlines ni baril ; `lcd_persistence` et
-      `lcd_grid_strength` dans sesame.cfg (2026-08)
-- [x] Mappers Codemasters (auto-détecté par l'en-tête 0x7FE0, registres
-      0x0000/0x4000/0x8000, premier Ko paginé, RAM Ernie Els Golf) et
-      coréen (page fenêtre 2 par 0xA000, heuristique gardée par « registres
-      Sega jamais écrits ») — ROMs de test `cmtest.sms`/`krtest.sms` dans
-      la suite (23 checks), état v3 (2026-08)
-- [x] Mapper Janggun : 4 fenêtres de 8 Ko (regs 0x4000/0x6000/0x8000/
-      0xA000, paires 16 Ko via 0xFFFE/0xFFFF), pages à octets MIROIRS
-      (bit 6), heuristique 0x6000 ; [R] EEPROM 93C46 : Microwire complet
-      (READ/WRITE/ERASE/EWEN/EWDS/ERAL/WRAL), fenêtre 0x8000 (DI/CLK/CS,
-      DO), persistée en <rom>.eeprom — activation par `eeprom` (cfg) /
-      `--eeprom` (pas d'en-tête détectable). ROMs jgtest/eetest dans la
-      suite (32 checks), état v6 (2026-08)
-- [x] Sauvegarde RAM cartouche sur disque (.sav — GUI toujours, headless
-      opt-in via --sav pour rester déterministe, 2026-08)
+Tout est déjà prêt (ROMs générées, étalons commités, headless sans GLFW,
+ZEXALL à SHA épinglé) ; corriger d'abord le hang `compare_ppm` (Phase 1).
 
-## Frontends
-- [x] Manette USB (API gamepad GLFW, 2 pads + Start = Pause, 2026-08)
-- [x] Redimensionnement + plein écran (touche F, 2026-08)
-- [x] Filtre CRT (pile d'effets portée de NeoST/POM2 : baril, scanlines,
-      shadow mask, persistance… — --crt / touche C, 2026-08)
-- [x] Mode kiosk (--kiosk [--kiosk-monitor N] : plein écran exclusif,
-      curseur masqué, CRT activé, 2026-08) + menu in-game (Start/F9 :
-      liste de jeux, restart, desktop, quit — 2026-08)
-- [x] Menu kiosk, parité NeoST : dossiers ROM multiples (`rom_dir` liste
-      « ; » dans sesame.cfg, fusionnés/triés) + échange des manettes 1/2
-      (action du menu « Gamepads: normal/swapped », clé `swap_gamepads`
-      persistée) (2026-08)
-- [x] Fichier de configuration `sesame.cfg` : chargé au lancement
-      (--config FILE, ./sesame.cfg ou à côté de l'exécutable), CLI
-      prioritaire, état effectif RÉÉCRIT à la sortie propre (les réglages
-      survivent) ; machine (pal, game_gear, bios), affichage (crt,
-      fullscreen, kiosk, rom_dir, no_sprite_limit) et les 13 paramètres du
-      filtre CRT (2026-08)
-- [x] Build WebAssembly — `src/wasm/main_wasm.cpp` (API C exportée) +
-      `web/index.html` (canvas 2D, WebAudio, clavier) + `tools/build_wasm.sh`
-      (emcc) ; recadrage GG et .sms/.gg/.sg gérés ; validé sous Node
-      (produits de build non commités) (2026-08)
+- [ ] Workflow GitHub Actions Linux : build gcc + clang `-Werror` puis
+      `run_selftests.py` (~2 s) ; job ASan/UBSan sur la même suite ;
+      build macOS (compilation du GUI — rien ne le garantit aujourd'hui) ;
+      nightly : ZEXALL complet + `tools/build_wasm.sh`. Le premier run
+      Linux validera que les étalons PPM sont bit-exacts hors Apple Silicon
+      (seul vrai risque de portabilité du cœur)
+- [ ] CMake : `enable_testing()` + `add_test` sur `run_selftests.py`,
+      `option(SESAME_SANITIZE)` (-fsanitize=address,undefined), flags par
+      `CXX_COMPILER_ID` (MSVC ≠ `-Wall;-Wextra`), `-Wshadow`, `install()`,
+      `stdc++fs` conditionnel (GCC 8)
+- [ ] `run_selftests.py` : `timeout=` + `try/except TimeoutExpired` sur
+      TOUS les subprocess (générateurs et `compare_ppm` compris) ;
+      assertions positives `OK 1`…`OK 5` (aujourd'hui seule l'absence de
+      « FAIL » est vérifiée : une ROM qui plante après le test 2 passe) ;
+      `--rewind-check` sur `vdptest.sms` (animée — sur l'image figée de
+      `selftest.sms`, un rewind no-op passe) ; `tempfile` au lieu de `/tmp`
+      en dur ; assertion `len(results) == EXPECTED`
+- [ ] `run_zexall.py` : `assert ok_count == 79` (compté mais jamais
+      comparé) + `timeout` ; `fetch_zexall.py` : vérifier le SHA des ROM
+      déjà en place (le commentaire le promet, le code ne le fait pas)
 
-## Outils
-- [x] Étalons d'images — `tools/compare_ppm.py` (tolérance/max-diff,
-      défaut zéro), références commitées dans `tests/refs/` (2026-08)
-- [x] ROM de test VDP dédiée — `tools/make_vdp_rom.py` -> `roms/vdptest.sms`
-      (3 scènes : scroll+colonne masquée, sprites 8x16 overflow/collision,
-      split-screen IRQ ligne ; verdicts SDSC + comparaison aux étalons,
-      intégrée à `run_selftests.py` — 16 checks ; mini-assembleur factorisé
-      dans `tools/smsasm.py`) (2026-08)
+## Phase 3 — Couverture de test (2-3 jours, après la Phase 2)
+
+Zéro check aujourd'hui sur : audio (PSG + YM2413), Game Gear, save-states
+fichier, Config, PAL, Light Phaser, GUI. Par rentabilité décroissante :
+
+- [ ] Check WAV avec checksum dans la suite (`--wav` existe déjà) —
+      première couverture du PSG et du YM2413 ; un `--check` en diff sur
+      `make_blip_table.py` vs le `.inc` commité
+- [ ] Aller-retour save-state fichier en deux invocations du headless
+      (`--state-save`/`--state-load` ne sont jamais exercés par la suite)
+- [ ] ROM de test Game Gear : CRAM à latch pair/impair, ports 0x00-0x06,
+      recadrage 160×144 — le sous-système le plus riche en pièges. Au
+      passage : table de registres dans `smsasm.py` (collapser les ~30
+      méthodes par (opcode, registre) en 5) et garde-fou de débordement
+      dans `Asm.db()` (l'affectation de tranche redimensionne le bytearray
+      silencieusement)
+- [ ] Micro-tests C++ (`doctest.h`, un seul header) : `Config` (qui réécrit
+      le fichier utilisateur !), `Cartridge::load`, `StateIO`, et
+      l'aller-retour `smsasm.py` ↔ `Z80Disasm.cpp` (valide l'assembleur et
+      le désassembleur l'un par l'autre)
+- [ ] Brancher `--shot-at`/`--exit-at` du GUI dans la suite (créés pour ça,
+      jamais utilisés — le GUI a zéro test)
+- [ ] Light Phaser : recommiter une ROM de validation (celle des « trois
+      visées » n'est pas dans le dépôt — la validation n'est pas rejouable)
+- [ ] Check PAL (séquence VCounter 313 lignes) dans la ROM VDP
+
+## Phase 4 — Refactors structurels (par impact)
+
+- [ ] Extraire `Machine::stepInstruction()` du corps de `runFrame`
+      (`Machine.cpp:85-116`) — débloque débogueur pas-à-pas, tests
+      d'instruction et le serveur MCP (le meilleur ratio valeur/effort du
+      projet)
+- [ ] Backend mémoire pour `StateIO` (~30 lignes) remplaçant
+      `open_memstream`/`fmemopen` POSIX (`Machine.cpp:216-237`) — le cœur
+      (et le rewind) devient 100 % C++ standard, Windows atteignable
+- [ ] Couche hôte partagée (`src/host/`) : `looksLikeBios`/résolution BIOS
+      (3 copies), table d'options déclarative + `--help` généré (le GUI
+      n'en a pas et avale toute option inconnue comme chemin de ROM),
+      `Vdp::visibleRect(Model)` (recadrage GG copié 3×), pompe audio,
+      `FramePacer` (cadence en dur `5992` dans le wasm). Objectif :
+      `main()` GUI < 100 lignes (aujourd'hui ~690)
+- [ ] Verrouiller les invariants : `= delete` sur les copies de
+      `Machine`/`Bus`/`Z80` (la copie implicite produit une machine
+      incohérente — `Z80` garde une référence sur le Bus d'origine) ;
+      `reset()` dans le constructeur de `Machine` (sinon PSG à volume max) ;
+      tables OPL en `constexpr` (globales mutables non thread-safe) ;
+      surcharges const/non-const dans `StateIO` + checksum d'état ;
+      `Machine::loadRom` acceptant un `Model` forcé (supprime le correctif
+      `forceGg` copié 3×)
+- [ ] Purger les 4 TODO mensongers (décrivent comme absent de l'implémenté) :
+      `Vdp.cpp:16`, `Io.cpp:94`, `Ym2413.hpp:19`, `Ym2413.cpp:220`
+- [ ] Divers relevés à l'audit : mutex dans le callback CoreAudio (anneau
+      SPSC lock-free — 1 producteur, 1 consommateur), backoff dans la
+      boucle d'erreur ALSA (spin 100 % CPU si périphérique débranché),
+      destructeurs GL à remplacer par un `shutdown()` explicite avant
+      `glfwTerminate`, accents cassés dans le menu kiosk
+      (`KioskMenu.cpp:211`, masque `& 0x7F`), config écrite dans le CWD
+      (viser `$XDG_CONFIG_HOME` / `Application Support`)
+
+## Phase 5 — Moyen terme
+
 - [ ] [R] Serveur MCP (à la Gearsystem) : exposer registres Z80/VDP,
       mémoire, points d'arrêt et pas-à-pas à des assistants IA via STDIO —
-      base naturelle : `sesame-headless` déterministe. Le chantier le plus
-      aligné avec la vocation pédagogique
-- [x] [R] Rewind / step-back par trame (inspiration Mesen 2) : un
-      save-state MÉMOIRE par trame émulée dans un anneau borné
-      (`rewind_seconds`, ~5,5 Mo/s), touche Retour arrière maintenue au
-      GUI ; `--rewind-check` headless (rejeu pixel-exact) dans la suite
-      (28 checks) (2026-08). Reste : recul par LIGNE (débogueur)
+      base : `sesame-headless` + `stepInstruction()` (Phase 4). Le chantier
+      le plus aligné avec la vocation pédagogique
+- [ ] Cible wasm dans CMake (`emcmake`) partageant la liste de sources
+      (aujourd'hui dupliquée dans `build_wasm.sh` — un `.cpp` ajouté au
+      cœur casse silencieusement le build web) ; `AudioWorklet` à la place
+      du `ScriptProcessor` déprécié ; réutiliser `Io::Button` au lieu des
+      bits recopiés en dur dans `index.html`
+- [ ] Valider le backend ALSA sur une vraie machine Linux (écrit non testé)
+- [ ] Bouton Reset console et lecture-arrière 0x3E côté SMS1
+- [ ] Rewind par LIGNE (débogueur)
 - [ ] [R] Code/Data Logger (tracer code exécuté vs données dans la ROM,
       inspiration Mesen 2/Nexen)
+- [ ] Port Windows si désiré (après le backend mémoire `StateIO` il reste :
+      headers GL sous MSVC/MinGW, backend audio WASAPI)
+- [ ] Décision de fond sur le rendu : l'immediate mode OpenGL est en sursis
+      sur macOS — le jour venu, viser SDL2/SDL3 plutôt qu'une migration
+      Metal directe
 
-## Non prioritaire (noté pour mémoire)
-- [ ] [R] Lunettes SegaScope 3-D (stéréoscopie ; seul MAME le gère)
+## Non-objectifs (décisions actées, ne pas rouvrir sans raison)
+
+- Pas de scheduler générique : la boucle actuelle, une fois le bug
+  `lineCycles` corrigé, est précise à l'instruction près — suffisant
+- Pas de gros framework de test : `doctest.h` (un header) couvre le besoin
+- Pas de Mega Drive : le seul geste utile est de ne pas coupler davantage
+  `Z80` à la classe concrète `Bus` si on y retouche
+- [R] Lunettes SegaScope 3-D (stéréoscopie ; seul MAME le gère) — noté
+  pour mémoire, non prioritaire
