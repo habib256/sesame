@@ -11,7 +11,11 @@ et contraintes de licence détaillées là-bas).
       « bit n,r/(hl) » de ZEXALL (2026-08)
 
 ## VDP
-- [ ] Modes 224/240 lignes (SMS2)
+- [x] Modes 224/240 lignes (SMS2) — sélection M1/M3 (M4+M2), table de noms
+      0x?700 32 rangées, scroll Y mod 256, terminateur de sprites 0xD0
+      inactif, séquences VCounter par mode/norme, hauteur dynamique dans
+      les deux frontends ; scène 224 + étalon dans la ROM de test VDP
+      (17 checks) (2026-08)
 - [x] PAL (313 lignes, ~49,70 Hz) — cadence, horloge CPU/PSG 3 546 893 Hz,
       séquence VCounter (`--pal` dans les deux frontends, 2026-08)
 - [ ] HCounter réel + latch sur front TH (light gun)

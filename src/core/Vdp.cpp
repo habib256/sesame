@@ -165,15 +165,32 @@ u8 Vdp::readStatus() {
 //  Compteurs H/V
 // -----------------------------------------------------------------------------
 u8 Vdp::vCounter() const {
-    // Mode 192 lignes (réf. SMS Power!, « VDP - V-counter values ») :
-    //  - NTSC (262 lignes) : 0x00..0xDA (lignes 0..218) puis saut à 0xD5
-    //    (ligne 219) et fin à 0xFF (ligne 261) ;
-    //  - PAL (313 lignes)  : 0x00..0xF2 (lignes 0..242) puis saut à 0xBA
-    //    (ligne 243) et fin à 0xFF (ligne 312).
+    // Séquences par norme ET par mode (réf. SMS Power!, « VDP - V-counter
+    // values ») : le compteur suit la ligne puis « saute » en arrière pour
+    // finir la trame à 0xFF (sauf NTSC 240, qui boucle sans saut).
+    const int h = height();
     if (region == Region::Pal) {
+        if (h == 240) {   // PAL 240 : 0x00-0xFF, 0x00-0x0A, 0xD2-0xFF
+            if (curLine <= 0xFF) return static_cast<u8>(curLine);
+            if (curLine <= 0x10A) return static_cast<u8>(curLine - 0x100);
+            return static_cast<u8>(curLine - 57);
+        }
+        if (h == 224) {   // PAL 224 : 0x00-0xFF, 0x00-0x02, 0xCA-0xFF
+            if (curLine <= 0xFF) return static_cast<u8>(curLine);
+            if (curLine <= 0x102) return static_cast<u8>(curLine - 0x100);
+            return static_cast<u8>(curLine - 57);
+        }
+        // PAL 192 : 0x00-0xF2 puis 0xBA-0xFF.
         if (curLine <= 0xF2) return static_cast<u8>(curLine);
         return static_cast<u8>(curLine - 57);
     }
+    if (h == 240)         // NTSC 240 : 0x00-0xFF puis 0x00-0x05, sans saut
+        return static_cast<u8>(curLine);
+    if (h == 224) {       // NTSC 224 : 0x00-0xEA puis 0xE5-0xFF
+        if (curLine <= 0xEA) return static_cast<u8>(curLine);
+        return static_cast<u8>(curLine - 6);
+    }
+    // NTSC 192 : 0x00-0xDA puis 0xD5-0xFF.
     if (curLine <= 0xDA) return static_cast<u8>(curLine);
     return static_cast<u8>(curLine - 6);
 }
@@ -205,18 +222,20 @@ bool Vdp::frameDone() {
 //  Avancement d'une ligne (appelé par Machine toutes les 228 cycles CPU)
 // -----------------------------------------------------------------------------
 void Vdp::runLine() {
-    // Drapeau VBlank : levé au moment où l'on traite la ligne 192, c.-à-d.
-    // juste après la fin de la dernière ligne visible (191) — voir en-tête.
-    if (curLine == kHeight) status |= 0x80;
+    const int h = height();   // 192, 224 ou 240 selon le mode courant
+
+    // Drapeau VBlank : levé au moment où l'on traite la première ligne
+    // après la zone visible — voir en-tête.
+    if (curLine == h) status |= 0x80;
 
     // Rendu des lignes visibles uniquement.
-    if (curLine < kHeight) renderLine(curLine);
+    if (curLine < h) renderLine(curLine);
 
     // Compteur d'interruption de ligne (registre 10) :
-    //  - lignes 0..192 incluses : décrément ; passage sous zéro -> rechargement
+    //  - zone active (+1) : décrément ; passage sous zéro -> rechargement
     //    depuis reg10 et levée de lineIrq ;
-    //  - lignes > 192 : rechargement continu depuis reg10.
-    if (curLine <= 192) {
+    //  - au-delà : rechargement continu depuis reg10.
+    if (curLine <= h) {
         if (lineCounter == 0) {
             lineCounter = regs[10];
             lineIrq = true;
@@ -257,8 +276,13 @@ void Vdp::renderLine(int y) {
     }
 
     // ---------------------------------------------------------------- Fond ---
-    // Table de noms : ((reg2 >> 1) & 7) << 11 — 32×28 entrées de 2 octets.
-    const int nameBase = ((regs[2] >> 1) & 0x07) << 11;
+    // Table de noms — 192 lignes : ((reg2 >> 1) & 7) << 11, 32×28 entrées ;
+    // 224/240 lignes : (((reg2 >> 2) & 3) << 12) | 0x700, 32×32 entrées et
+    // le défilement vertical boucle sur 256 au lieu de 224.
+    const int  h        = height();
+    const bool tall     = (h != kHeight);
+    const int  nameBase = tall ? ((((regs[2] >> 2) & 0x03) << 12) | 0x700)
+                               : (((regs[2] >> 1) & 0x07) << 11);
 
     // reg8 = scroll X (fond décalé vers la DROITE de scrollX pixels).
     // Verrou reg0 bit 6 : pas de scroll horizontal pour les lignes 0-15.
@@ -274,11 +298,13 @@ void Vdp::renderLine(int y) {
         // (équivalent au couple fine scroll / starting column de la doc).
         const int bx = (x - scrollX) & 0xFF;
 
-        // reg9 = scroll Y, ajouté à la ligne modulo 224 (28 lignes de tuiles).
+        // reg9 = scroll Y, ajouté à la ligne modulo 224 (28 rangées de
+        // tuiles) en 192 lignes, modulo 256 (32 rangées) en 224/240.
         // Verrou reg0 bit 7 : pas de scroll vertical pour les colonnes
         // d'ÉCRAN 24-31 (x >= 192).
         int vy;
         if ((regs[0] & 0x80) != 0 && x >= 192) vy = y;
+        else if (tall)                         vy = (y + scrollY) & 0xFF;
         else                                   vy = (y + scrollY) % 224;
 
         // Entrée de table de noms : bits 8-0 tuile, 9 flip H, 10 flip V,
@@ -321,7 +347,9 @@ void Vdp::renderLine(int y) {
 
     for (int i = 0; i < 64; ++i) {
         const int ya = vram[satBase + i];
-        if (ya == 0xD0) break;                 // Y = 0xD0 termine la liste (mode 192 lignes)
+        // Y = 0xD0 termine la liste — en mode 192 lignes SEULEMENT (en
+        // 224/240, 0xD0 est une position valide et les 64 sprites défilent).
+        if (!tall && ya == 0xD0) break;
 
         // Sprite visible sur les lignes [Y+1, Y+1+hauteur). La comparaison se
         // fait en 8 BITS comme sur le vrai VDP : un sprite avec Y >= 0xF1

@@ -16,10 +16,15 @@
 #     paire qui se chevauche (-> drapeau collision). Les drapeaux lus dans
 #     le registre de statut sont imprimés sur SDSC (« OVF OK », « COL OK »).
 #     Capture à la trame 50.
-#   Scène C (trames ~62-...) : split-screen par IRQ LIGNE (reg 10) — le
+#   Scène C (trames ~62-88) : split-screen par IRQ LIGNE (reg 10) — le
 #     handler pousse le défilement X à 0x80 en pleine trame, la boucle le
 #     remet à 0 à chaque VBlank : cisaillement stable, « IRQ OK » si le
 #     handler a tourné. Capture à la trame 80.
+#   Scène D (trames ~89-...) : MODE 224 LIGNES (SMS2, M4+M2+M1) — table de
+#     noms 32 rangées à 0x3700, bordures aux rangées 0 et 27 pour prouver la
+#     hauteur. Le sprite « terminateur » (Y=0xD0) posé par la scène C
+#     devient VISIBLE ligne 209 : en 224 lignes, 0xD0 n'est plus une fin de
+#     liste. Capture à la trame 110 (PPM 256x224).
 #
 #  L'attente de trame se fait en scrutant le VCounter (port 0x7E) et jamais
 #  le registre de statut : le lire consommerait les drapeaux que la scène B
@@ -112,8 +117,31 @@ def build_sat():
     return bytes(ys), bytes(xs)
 
 
+def build_name_table_224():
+    """Table de noms des modes 224/240 : 32 rangées de 32 entrées, basée à
+    0x3700 (reg2 = 0xFF). Rangées 0 et 27 pleines (bords haut et bas de la
+    zone visible 224), rangées 28-31 en damier — elles ne doivent PAS
+    apparaître sans défilement."""
+    entries = []
+    for row in range(32):
+        for col in range(32):
+            if row in (0, 27) or col in (0, 31):
+                t = 1                        # cadre de la zone visible
+            elif row >= 28:
+                t = 2                        # invisible sauf bug de hauteur
+            elif row % 5 == 2:
+                t = 3
+            elif col % 6 == 3:
+                t = 4
+            else:
+                t = 0
+            entries += [t & 0xFF, 0x00]
+    return bytes(entries)
+
+
 TILES = build_tiles()
 NAMETABLE = build_name_table()
+NAMETABLE224 = build_name_table_224()
 SAT_Y, SAT_X = build_sat()
 
 
@@ -261,9 +289,17 @@ def build_rom():
     print_str(a, 'str_irq_fail')
     a.label('irq_done')
 
-    # Boucle finale : le split continue indéfiniment (captures tardives OK).
-    a.label('forever')
+    # ---- Scène D : mode 224 lignes (SMS2) -----------------------------------
+    vdp_reg(a, 0, 0x06)    # M4 + M2, IE1 coupée (fin du split)
+    vdp_reg(a, 1, 0x50)    # affichage ON + M1 -> 224 lignes
     vdp_reg(a, 8, 0x00)
+    vdp_reg(a, 9, 0x00)
+    # Table de noms des modes étendus : 0x3700 (reg2 = 0xFF), 32 rangées.
+    vdp_addr(a, 0x3700, 0x40)
+    upload(a, 'nametable224', len(NAMETABLE224))
+
+    # Boucle finale (les captures tardives voient la scène D).
+    a.label('forever')
     a.call('wait_frame')
     a.jr('forever')
 
@@ -287,6 +323,7 @@ def build_rom():
     a.label('spr_palette');  a.db(SPRITE_PALETTE)
     a.label('tiles');        a.db(TILES)
     a.label('nametable');    a.db(NAMETABLE)
+    a.label('nametable224'); a.db(NAMETABLE224)
     a.label('sat_y');        a.db(SAT_Y)
     a.label('sat_x');        a.db(SAT_X)
     a.label('str_banner');   a.db(b'SESAME VDPTEST\n\0')

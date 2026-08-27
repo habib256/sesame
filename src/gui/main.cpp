@@ -527,10 +527,13 @@ int main(int argc, char** argv)
         // dans la trame 256×192 du VDP) est téléversée : GL_UNPACK_ROW_LENGTH
         // fait lire la sous-image en place, sans copie.
         const bool gearGear = (machine.model() == Model::GameGear);
+        const int vdpH = machine.vdp.height();   // 192/224/240 selon le mode
         const int srcW = gearGear ? Vdp::kGgWidth : Vdp::kWidth;
-        const int srcH = gearGear ? Vdp::kGgHeight : Vdp::kHeight;
+        const int srcH = gearGear ? Vdp::kGgHeight : vdpH;
         const u32* srcPx = machine.vdp.frameBuffer() +
-            (gearGear ? Vdp::kGgOffsetY * Vdp::kWidth + Vdp::kGgOffsetX : 0);
+            (gearGear ? ((vdpH - Vdp::kGgHeight) / 2) * Vdp::kWidth +
+                            Vdp::kGgOffsetX
+                      : 0);
         glBindTexture(GL_TEXTURE_2D, tex);
         glPixelStorei(GL_UNPACK_ROW_LENGTH, Vdp::kWidth);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, srcW, srcH, 0,

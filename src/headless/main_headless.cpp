@@ -54,9 +54,10 @@ void printUsage(FILE* out)
 // -----------------------------------------------------------------------------
 //  Écrit le framebuffer RGBA du VDP dans un PPM binaire (P6).
 //  Chaque pixel est un u32 little-endian : R = v & 0xFF, puis G, puis B.
-//  En Game Gear, seule la fenêtre visible 160×144 (centrée) est écrite.
+//  `vdpHeight` est la hauteur visible du mode courant (192/224/240) ;
+//  en Game Gear, seule la fenêtre visible 160×144 (centrée) est écrite.
 // -----------------------------------------------------------------------------
-bool writePpm(const char* path, const u32* fb, Model model)
+bool writePpm(const char* path, const u32* fb, Model model, int vdpHeight)
 {
     FILE* f = std::fopen(path, "wb");
     if (!f) {
@@ -65,9 +66,9 @@ bool writePpm(const char* path, const u32* fb, Model model)
     }
     const bool gg = (model == Model::GameGear);
     const int w  = gg ? Vdp::kGgWidth   : Vdp::kWidth;
-    const int h  = gg ? Vdp::kGgHeight  : Vdp::kHeight;
+    const int h  = gg ? Vdp::kGgHeight  : vdpHeight;
     const int x0 = gg ? Vdp::kGgOffsetX : 0;
-    const int y0 = gg ? Vdp::kGgOffsetY : 0;
+    const int y0 = gg ? (vdpHeight - Vdp::kGgHeight) / 2 : 0;
     std::fprintf(f, "P6\n%d %d\n255\n", w, h);
     // Conversion RGBA -> RGB, un pixel à la fois (simple et déterministe).
     for (int y = 0; y < h; ++y) {
@@ -414,7 +415,8 @@ int main(int argc, char** argv)
         if (shotPrefix && ((f + 1) % shotEvery) == 0) {
             char name[1024];
             std::snprintf(name, sizeof(name), "%s%04ld.ppm", shotPrefix, f + 1);
-            if (!writePpm(name, machine.vdp.frameBuffer(), machine.model())) {
+            if (!writePpm(name, machine.vdp.frameBuffer(), machine.model(),
+                          machine.vdp.height())) {
                 if (traceFile) std::fclose(traceFile);
                 if (wavFile) std::fclose(wavFile);
                 return 1;
@@ -425,7 +427,7 @@ int main(int argc, char** argv)
     // --- Sorties finales -----------------------------------------------------
     if (screenshotPath) {
         if (!writePpm(screenshotPath, machine.vdp.frameBuffer(),
-                      machine.model())) {
+                      machine.model(), machine.vdp.height())) {
             if (traceFile) std::fclose(traceFile);
             if (wavFile) std::fclose(wavFile);
             return 1;

@@ -34,6 +34,7 @@ VDP_SCENES = [
     ('scroll',  20, 'vdp_scroll.ppm'),
     ('sprites', 50, 'vdp_sprites.ppm'),
     ('irqline', 80, 'vdp_irqline.ppm'),
+    ('mode224', 110, 'vdp_224.ppm'),     # 256x224 : mode SMS2
 ]
 
 results = []  # liste de (nom, ok, détail)

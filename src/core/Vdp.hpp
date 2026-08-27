@@ -18,16 +18,29 @@ class StateIO;
 class Vdp {
 public:
     static constexpr int kWidth  = 256;
-    static constexpr int kHeight = 192;      // mode 4 standard (224/240 : TODO)
+    static constexpr int kHeight = 192;       // mode 4 standard
+    static constexpr int kMaxHeight = 240;    // mode 240 lignes (SMS2, PAL)
     static constexpr int kLinesNtsc = 262;
     static constexpr int kLinesPal  = 313;
 
-    // Fenêtre visible Game Gear : 160×144 centrée dans la sortie 256×192.
-    // Le VDP rend la trame complète ; les frontends recadrent.
+    // Hauteur visible du mode courant : 224 (M4+M2+M1) ou 240 (M4+M2+M3)
+    // sur SMS2, 192 sinon. Les frontends la relisent à chaque trame.
+    int height() const {
+        if ((regs[0] & 0x06) == 0x06) {          // M4 et M2
+            const bool m1 = (regs[1] & 0x10) != 0;
+            const bool m3 = (regs[1] & 0x08) != 0;
+            if (m1 && !m3) return 224;
+            if (m3 && !m1) return 240;
+        }
+        return kHeight;
+    }
+
+    // Fenêtre visible Game Gear : 160×144 centrée dans la sortie du VDP.
+    // Le VDP rend la trame complète ; les frontends recadrent (le décalage
+    // vertical dépend du mode : (height() - 144) / 2, soit 24 en 192 lignes).
     static constexpr int kGgWidth   = 160;
     static constexpr int kGgHeight  = 144;
-    static constexpr int kGgOffsetX = (kWidth  - kGgWidth)  / 2;  // 48
-    static constexpr int kGgOffsetY = (kHeight - kGgHeight) / 2;  // 24
+    static constexpr int kGgOffsetX = (kWidth - kGgWidth) / 2;  // 48
 
     void reset();
 
@@ -64,7 +77,8 @@ public:
     bool frameDone();
 
     int line() const { return curLine; }
-    const u32* frameBuffer() const { return fb; }  // RGBA, kWidth * kHeight
+    // RGBA, kWidth * height() lignes valides (tampon alloué pour kMaxHeight).
+    const u32* frameBuffer() const { return fb; }
 
     // --- État exposé (débogueur / save-state) --------------------------------
     u8 vram[0x4000]{};
@@ -74,7 +88,7 @@ public:
     u8 regs[16]{};
 
 private:
-    u32 fb[kWidth * kHeight]{};
+    u32 fb[kWidth * kMaxHeight]{};
     Region region = Region::Ntsc;
     Model  model  = Model::Sms;
     u8 cramLatch = 0;   // GG : octet pair latché, commité par l'octet impair

@@ -15,6 +15,10 @@ Répond à « Sesame gère-t-il X ? ». Mis à jour à chaque chantier.
 ## VDP 315-5124 (`src/core/Vdp.cpp`)
 - Mode 4, 256×192, rendu par ligne ; NTSC (262 lignes, ~59,92 Hz) et
   PAL (313 lignes, ~49,70 Hz, horloge CPU/PSG 3 546 893 Hz) via `--pal`
+- Modes 224/240 lignes (SMS2, M4+M2+M1/M3) : `height()` dynamique relu par
+  les frontends, table de noms 32 rangées basée 0x?700, scroll Y mod 256,
+  terminateur de sprites 0xD0 inactif, séquences VCounter propres à chaque
+  mode et norme
 - Défilement X/Y + verrous (reg0 bits 6/7), colonne gauche masquable
 - Sprites 8×8 et 8×16, limite 8/ligne (overflow), collision, early clock ;
   comparaison Y en 8 bits (un sprite à Y >= 0xF1 déborde en haut de l'écran)
