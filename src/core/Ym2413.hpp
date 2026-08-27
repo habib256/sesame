@@ -77,13 +77,18 @@ private:
     Channel ch[kNumChannels];
 
     u32 lfoCounter = 0;          // compteur global des LFO (vibrato/trémolo)
+    u32 noiseLfsr  = 1;          // LFSR 23 bits du mode rythme
     u64 clockAcc = 0;            // accumulateur cycles CPU -> échantillons natifs
     s32 sampleSum = 0;           // somme des échantillons natifs...
     int sampleCount = 0;         // ...pour la moyenne de takeSample()
 
     void keyOnOff(int c, bool on);
+    void keyOnOp(Op& o);               // key on d'un seul opérateur (rythme)
+    void keyOffOp(Op& o);
     const u8* patchFor(int c) const;   // 8 octets du patch du canal
     int  opOutput(Op& o, const u8* patch, int opIdx, int c, int fmInput);
     void advanceEnvelope(Op& o, const u8* patch, int opIdx, int c);
+    void advancePhase(Op& o, const u8* patch, int opIdx, int c);
+    int  rhythmMix();                  // les 5 percussions (canaux 6-8)
     int  computeSample();              // un échantillon natif (somme des canaux)
 };

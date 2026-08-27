@@ -30,7 +30,13 @@
 //    - INSTRUMENTS ROM : jeu de patches APPROXIMATIF écrit d'après les
 //      descriptions publiques des instruments — à remplacer par un dump
 //      vérifié (TODO) ; l'instrument utilisateur, lui, est exact ;
-//    - mode rythme non implémenté (TODO).
+//    - MODE RYTHME (reg 0x0E bit 5) : les canaux 6-8 deviennent cinq
+//      percussions — grosse caisse (2 opérateurs FM), caisse claire,
+//      charleston, tom et cymbale. Le vrai silicium mélange des bits de
+//      phase des opérateurs 13/17 et un LFSR ; ici : tom = sinus pur,
+//      caisse claire = carré de phase ⊕ bruit, charleston = bruit,
+//      cymbale = carré du XOR des phases 7-mod/8-car — timbres plausibles,
+//      pas cycle-exact (approximation documentée).
 // =============================================================================
 #include "Ym2413.hpp"
 
@@ -112,6 +118,16 @@ constexpr u8 kRomPatch[15][8] = {
     {0x21, 0x41, 0x89, 0x03, 0xF1, 0xF4, 0xF0, 0x13},  // 15 basse électrique
 };
 
+// Patches du mode rythme (mêmes réserves que kRomPatch : approximations).
+// [0] grosse caisse (2 opérateurs), [1] charleston/caisse claire,
+// [2] tom/cymbale — seuls les taux d'enveloppe comptent pour les voix à
+// bruit, la grosse caisse utilise le patch complet.
+constexpr u8 kRhythmPatch[3][8] = {
+    {0x01, 0x01, 0x16, 0x07, 0xF8, 0xF8, 0x68, 0x68},  // grosse caisse
+    {0x01, 0x01, 0x00, 0x00, 0xF8, 0xE8, 0x68, 0x58},  // charleston / claire
+    {0x05, 0x01, 0x00, 0x00, 0xF8, 0xA8, 0x58, 0x55},  // tom / cymbale
+};
+
 }  // namespace
 
 void Ym2413::reset() {
@@ -122,6 +138,7 @@ void Ym2413::reset() {
     for (u8& b : userPatch) b = 0;
     for (Channel& c : ch) c = Channel{};
     lfoCounter = 0;
+    noiseLfsr = 1;
     clockAcc = 0;
     sampleSum = 0;
     sampleCount = 0;
@@ -131,25 +148,58 @@ const u8* Ym2413::patchFor(int c) const {
     return ch[c].inst == 0 ? userPatch : kRomPatch[ch[c].inst - 1];
 }
 
+void Ym2413::keyOnOp(Op& o) {
+    // Key ON d'un opérateur : phase remise à zéro, enveloppe en attaque.
+    o.phase = 0;
+    o.egLevel = 127;
+    o.egPhase = 1;
+}
+
+void Ym2413::keyOffOp(Op& o) {
+    if (o.egPhase != 0)
+        o.egPhase = 4;   // relâchement
+}
+
 void Ym2413::keyOnOff(int c, bool on) {
     Channel& chan = ch[c];
     if (on && !chan.keyOn) {
-        // Key ON : phases remises à zéro, enveloppes en attaque.
-        chan.mod.phase = chan.car.phase = 0;
-        chan.mod.egLevel = chan.car.egLevel = 127;
-        chan.mod.egPhase = chan.car.egPhase = 1;
+        keyOnOp(chan.mod);
+        keyOnOp(chan.car);
     } else if (!on && chan.keyOn) {
-        // Key OFF : les enveloppes passent en relâchement.
-        if (chan.mod.egPhase != 0) chan.mod.egPhase = 4;
-        if (chan.car.egPhase != 0) chan.car.egPhase = 4;
+        keyOffOp(chan.mod);
+        keyOffOp(chan.car);
     }
     chan.keyOn = on;
 }
 
 void Ym2413::writeData(u8 v) {
+    const u8 old = regs[regLatch];
     regs[regLatch] = v;
     if (regLatch < 0x08) {
         userPatch[regLatch] = v;
+        return;
+    }
+    if (regLatch == 0x0E) {
+        // Mode rythme : bit 5 = activation ; bits 4-0 = key des percussions
+        // (BD, SD, TOM, CYM, HH). Chaque front pilote SON opérateur.
+        struct { u8 bit; Op* op1; Op* op2; } keys[] = {
+            {0x10, &ch[6].mod, &ch[6].car},  // grosse caisse : 2 opérateurs
+            {0x08, &ch[7].car, nullptr},     // caisse claire
+            {0x04, &ch[8].mod, nullptr},     // tom
+            {0x02, &ch[8].car, nullptr},     // cymbale
+            {0x01, &ch[7].mod, nullptr},     // charleston
+        };
+        for (auto& k : keys) {
+            const bool was = (old & 0x20) && (old & k.bit);
+            const bool now = (v & 0x20) && (v & k.bit);
+            if (now && !was) {
+                keyOnOp(*k.op1);
+                if (k.op2) keyOnOp(*k.op2);
+            } else if (!now && was) {
+                keyOffOp(*k.op1);
+                if (k.op2) keyOffOp(*k.op2);
+            }
+        }
         return;
     }
     if (regLatch >= 0x10 && regLatch <= 0x18) {
@@ -234,18 +284,23 @@ void Ym2413::advanceEnvelope(Op& o, const u8* patch, int opIdx, int c) {
 //  phase du modulateur (0 pour le modulateur lui-même, qui utilise sa
 //  rétroaction).
 // -----------------------------------------------------------------------------
-int Ym2413::opOutput(Op& o, const u8* patch, int opIdx, int c, int fmInput) {
-    const Channel& chan = ch[c];
+// Générateur de phase d'un opérateur (avec vibrato optionnel).
+void Ym2413::advancePhase(Op& o, const u8* patch, int opIdx, int c) {
     const u8 flags = patch[opIdx];
-
-    // --- Générateur de phase (avec vibrato optionnel) -----------------------
-    u32 fnum = chan.fnum;
+    u32 fnum = ch[c].fnum;
     if (flags & 0x40) {
         const int pm = kPmWave[(lfoCounter >> 10) & 7];
         fnum = (u32)((int)fnum + (((int)fnum * pm) >> 9));
     }
-    const u32 step = ((fnum * (u32)kMult2[flags & 0x0F]) << chan.block) >> 1;
+    const u32 step = ((fnum * (u32)kMult2[flags & 0x0F]) << ch[c].block) >> 1;
     o.phase = (o.phase + step) & 0x7FFFF;        // 19 bits
+}
+
+int Ym2413::opOutput(Op& o, const u8* patch, int opIdx, int c, int fmInput) {
+    const Channel& chan = ch[c];
+    const u8 flags = patch[opIdx];
+
+    advancePhase(o, patch, opIdx, c);
 
     // --- Atténuation totale (unités log2/256) -------------------------------
     int att = o.egLevel * 16;
@@ -273,10 +328,82 @@ int Ym2413::opOutput(Op& o, const u8* patch, int opIdx, int c, int fmInput) {
     return opSine(idx, att, rect);
 }
 
-// Un échantillon natif : somme des porteuses des 9 canaux.
-int Ym2413::computeSample() {
+// -----------------------------------------------------------------------------
+//  Percussions du mode rythme (canaux 6-8). Volumes : BD = vol du canal 6 ;
+//  HH = nibble « instrument » du canal 7, SD = son volume ; TOM = nibble
+//  instrument du canal 8, CYM = son volume (câblage réel des regs 0x36-38).
+// -----------------------------------------------------------------------------
+int Ym2413::rhythmMix() {
     int sum = 0;
-    for (int c = 0; c < kNumChannels; ++c) {
+    const int noiseBit = (int)(noiseLfsr & 1);
+
+    // Grosse caisse : canal FM 2 opérateurs classique, patch rythme dédié.
+    {
+        Channel& c6 = ch[6];
+        if (c6.mod.egPhase != 0 || c6.car.egPhase != 0) {
+            const u8* p = kRhythmPatch[0];
+            advanceEnvelope(c6.mod, p, 0, 6);
+            advanceEnvelope(c6.car, p, 1, 6);
+            const int fb = p[3] & 7;
+            const int fbIn = fb ? ((c6.mod.fb1 + c6.mod.fb2) >> (9 - fb)) : 0;
+            const int m = opOutput(c6.mod, p, 0, 6, fbIn);
+            c6.mod.fb2 = c6.mod.fb1;
+            c6.mod.fb1 = m;
+            // Volume : opOutput (porteuse) lit ch[6].vol = reg 0x36 bas.
+            sum += opOutput(c6.car, p, 1, 6, m >> 1);
+        }
+    }
+
+    // Voix à une seule « tranche » : l'enveloppe module l'amplitude, le
+    // signal vient du bruit et/ou d'un bit de phase.
+    struct Voice { Op* op; int chIdx; int opIdx; int vol; int kind; };
+    Voice voices[] = {
+        {&ch[7].mod, 7, 0, ch[7].inst, 0},   // charleston : bruit pur
+        {&ch[7].car, 7, 1, ch[7].vol, 1},    // caisse claire : phase ^ bruit
+        {&ch[8].mod, 8, 0, ch[8].inst, 2},   // tom : sinus pur
+        {&ch[8].car, 8, 1, ch[8].vol, 3},    // cymbale : phases 7m ^ 8c
+    };
+    for (Voice& v : voices) {
+        Op& o = *v.op;
+        if (o.egPhase == 0) continue;
+        const u8* p = kRhythmPatch[v.chIdx == 7 ? 1 : 2];
+        advanceEnvelope(o, p, v.opIdx, v.chIdx);
+        advancePhase(o, p, v.opIdx, v.chIdx);
+        const int att = o.egLevel * 16 + v.vol * 128;
+        switch (v.kind) {
+        case 0:   // charleston
+            sum += noiseBit ? expLookup(att) : -expLookup(att);
+            break;
+        case 1: { // caisse claire
+            const int bit = ((o.phase >> 18) ^ (u32)noiseBit) & 1;
+            sum += bit ? expLookup(att) : -expLookup(att);
+            break;
+        }
+        case 2:   // tom : sinus de l'opérateur, sans modulation
+            sum += opSine((int)(o.phase >> 9), att, false);
+            break;
+        default: { // cymbale : carré métallique du XOR de deux phases
+            const int bit = (int)(((ch[7].mod.phase >> 17) ^
+                                   (o.phase >> 18)) & 1);
+            sum += bit ? expLookup(att) : -expLookup(att);
+            break;
+        }
+        }
+    }
+
+    // LFSR de bruit 23 bits (prises 0 et 14, façon famille OPL).
+    noiseLfsr = (noiseLfsr >> 1) |
+                (((noiseLfsr ^ (noiseLfsr >> 14)) & 1) << 22);
+    return sum;
+}
+
+// Un échantillon natif : somme des porteuses des canaux mélodiques, plus
+// les percussions quand le mode rythme est actif.
+int Ym2413::computeSample() {
+    const bool rhythm = (regs[0x0E] & 0x20) != 0;
+    const int melodic = rhythm ? 6 : kNumChannels;
+    int sum = 0;
+    for (int c = 0; c < melodic; ++c) {
         Channel& chan = ch[c];
         if (chan.mod.egPhase == 0 && chan.car.egPhase == 0)
             continue;  // canal muet (ni tenu ni queue de relâchement)
@@ -297,6 +424,8 @@ int Ym2413::computeSample() {
         // synthèse FM (2 opérateurs en série).
         sum += opOutput(chan.car, patch, 1, c, modOut >> 1);
     }
+    if (rhythm)
+        sum += rhythmMix();
     lfoCounter++;
     // 9 canaux x ±4084 : mise à l'échelle pour cohabiter avec le PSG.
     return sum >> 1;
@@ -347,6 +476,7 @@ void Ym2413::serialize(StateIO& s) {
         }
     }
     s.u32v(lfoCounter);
+    s.u32v(noiseLfsr);
     s.u64v(clockAcc);
     // Les échantillons natifs accumulés entre deux trames 44,1 kHz font
     // partie de l'état : les vider casserait le déterminisme de la reprise.
